@@ -13,43 +13,73 @@ Universal memory layer for AI applications. Not another data pipeline or convers
 - `src/adapters/supabase.ts` — Cloud sync adapter (Supabase)
 - `examples/` — Usage examples
 
-## The Startup Thesis
+## The Startup Thesis (Evolved)
+
+### The Product: Memory Passport
+Not an npm package. A **portable AI identity protocol with permissioned access.**
+
+```
+OLD POSITIONING:
+"npm install our SDK, get memory"
+(competes with Mem0 on infrastructure — you lose)
+
+NEW POSITIONING:
+"Your users sign in with Memory Passport.
+Your app gets the context they choose to share.
+You didn't build memory — you plugged into theirs."
+(competes with nobody — new category)
+```
 
 ### The Problem
 Every AI app has amnesia. Users re-explain themselves every session. No continuity across tools. When you switch from ChatGPT to Claude, you start from zero. Every. Single. Time.
 
 ### What Already Exists (and why it's not enough)
 - **Native memory** (ChatGPT Memory, Claude Memory) — siloed to one platform, controlled by the company, not the user
-- **Browser extensions** (conversation exporters, prompt managers) — move **conversations**, not understanding. Dumping 500 raw chat transcripts into another AI isn't memory, it's a data dump nobody reads
-- **Dev tools** (Mem0, Zep, LangChain memory) — built by infra engineers for developers, focused on vector search and RAG. They solve "how to store embeddings" not "how to understand a human across apps"
-- **Unified frontends** (TypingMind, OpenRouter) — one UI for multiple models, but memory is still per-conversation
+- **Mem0** ($7.5M funded) — graph memory, contradiction handling, temporal reasoning. Sells to DEVELOPERS. Developer owns the data, not the user
+- **Zep** — temporal knowledge graphs, context engineering. Same developer-owned model
+- **Browser extensions** — move conversations, not understanding
+- **Unified frontends** (TypingMind, OpenRouter) — one UI for multiple models, memory still per-conversation
 
-### The Gap We Fill
-The difference between moving data and moving understanding:
+### The Competitive Insight
+Don't compete BELOW Mem0 (on memory infrastructure — they win). Compete ABOVE. Could literally use Mem0 as a backend and build identity + permissions + portability on top.
 
-**What extensions do:** "Here are 500 conversations"
-**What Memory Layer does:** "This user learns best with examples, gets frustrated with abstract explanations, is intermediate at Python, advanced at SQL, planned to learn Docker next week, and engages most between 9-11pm"
+Mem0 gives developers memory. Memory Passport gives users sovereignty over their AI identity.
 
-We don't dump transcripts. We build **compressed, actionable context** that any AI can immediately use. `memory.recall()` returns understanding, not history.
+### Why Mem0 Can't Copy This
+Their business model prevents it. They sell to developers. Making memory user-owned means:
+- Developer loses control of personalization data
+- Users can take data to a competitor
+- Pricing model breaks (who pays?)
+- Classic innovator's dilemma
 
 ### What Makes Us Different
-1. **Built from the user side, not the infra side.** We didn't start with "let's build a vector database." We started with "I was using AI and it forgot me and that felt broken." The frustration came first, the solution followed.
-2. **Prototype proven inside a real product.** SensAI's memory layer wasn't theoretical — it solved real UX (tutor forgetting students between sessions). Most memory startups start with the SDK and hope someone uses it. We started with the product and extracted the SDK.
-3. **Emotional context layer.** Nobody else tracks HOW the user felt during interactions. "You were frustrated last time we discussed recursion" is fundamentally different from "you asked about recursion." This is empathetic memory — not just data recall.
-4. **User-owned, not developer-owned.** Mem0/Zep store data for the developer on their servers. We flip it: the USER owns the memory. Apps request access. Like Sign In with Google, but for AI memory. A user-facing dashboard where you see everything AI knows about you, across all your apps. You own it, delete it, export it, port it.
-5. **Understanding layer, not plumbing.** Extensions move text. We move intelligence. The `contextForAI()` function doesn't return raw history — it returns a compressed profile any AI model can immediately act on.
+1. **User-owned, not developer-owned.** Apps request access. Like Sign In with Google, but for AI memory
+2. **Cross-app identity.** Mem0 stores memories for one app. Memory Passport knows user_123 in App A is the same person as google_456 in App B
+3. **Permissioned access.** Memory organized into scoped categories (skills, preferences, goals, projects, emotional patterns). Each app gets only what the user allows
+4. **Memory revocation.** Users delete memories, revocation propagates to connected apps
+5. **Prototype proven inside a real product.** SensAI's memory layer solved real UX before extraction
+6. **Emotional context layer.** "You were frustrated last time we discussed recursion" vs "you asked about recursion"
 
-### The Market Window
-The big players (OpenAI, Anthropic, Google) will keep improving native memory. Our window is the gap between "AI has no memory" and "every AI has great memory." That's ~2-3 years. BUT — even when native memory improves, it stays siloed. ChatGPT won't natively share memory with Claude. Our layer sits BETWEEN them. Cross-platform, user-owned memory doesn't disappear when native memory gets better — it becomes more valuable because there's more to connect.
+### The Market Bet
+Every big player (Apple, Google, OpenAI) benefits from memory SILOS. Portable memory helps users but hurts platforms. None will build it because it helps competitors. Same reason messaging never unified (iMessage vs RCS vs WhatsApp).
 
-### The Solution
-`@memory-layer/core` — a pluggable SDK:
+### The SDK (Current Implementation)
+`@memory-layer/core` — the developer integration point:
 - `memory.remember(key, value)` — store context
 - `memory.recall()` — get compressed, actionable context back (not raw history)
 - `memory.contextForAI()` — inject understanding into any AI prompt
 - `memory.plan(goals)` — plan for next session
 - `memory.updateEngagement(state, rate)` — track emotional/engagement patterns
 - Pluggable storage: localStorage (offline), Supabase (cloud), custom adapters
+
+### Go-to-Market Strategy
+1. **Phase 1:** Sell SDK value to indie devs (AI tutors, coaches, companions). They integrate for good memory, not cross-app
+2. **Phase 2:** Users start seeing "Sign in with Memory" buttons. Cross-app context becomes a bonus
+3. **Phase 3:** User dashboard — see/edit/delete/export your AI memory across all apps
+4. **Phase 4:** Memory Passport becomes the protocol. Mem0 plugs into it as a memory engine underneath
+
+### Key Documents
+- `FOUNDER-QA.md` — 12 hard founder questions answered honestly, with strength scoreboard and identified weak spots. Backbone of the pitch deck.
 
 ### Key Design Decisions
 - **Adapter pattern**: StorageAdapter interface so any backend works
