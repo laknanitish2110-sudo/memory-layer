@@ -1,0 +1,52 @@
+{
+  "name": "memory-layer",
+  "version": "0.1.0",
+  "description": "Universal memory layer for AI applications",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/cli.ts",
+    "dev": "tsx watch src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/laknanitish2110-sudo/memory-layer.git"
+  },
+  "keywords": [
+    "ai",
+    "memory",
+    "llm",
+    "embeddings",
+    "semantic-search"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/laknanitish2110-sudo/memory-layer/issues"
+  },
+  "homepage": "https://github.com/laknanitish2110-sudo/memory-layer#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "uuid": "^14.0.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "@types/uuid": "^10.0.0",
+    "supertest": "^7.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
