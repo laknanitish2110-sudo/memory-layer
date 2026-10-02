@@ -1,59 +1,92 @@
-# memory-layer
+# @memory-layer/core
 
-Universal memory layer for AI applications — short-term, long-term, and semantic memory with a REST API.
+Universal memory layer for AI applications. Store, retrieve, and share user memory across apps with pluggable storage backends.
+
+## Install
+
+```bash
+npm install @memory-layer/core
+```
 
 ## Quick Start
 
-```bash
-npm install
-npm start        # starts server on port 3210
+```typescript
+import { MemoryStore } from "@memory-layer/core";
+
+const store = new MemoryStore();
+
+// Store a memory
+await store.set("user-1", "theme", "dark");
+
+// Retrieve it
+const mem = await store.get("user-1", "theme");
+console.log(mem.value); // "dark"
+
+// List all memories for a user
+const all = await store.list("user-1");
+
+// Delete
+await store.delete("user-1", "theme");
 ```
 
-## API
+## Cross-App Memory
 
-All endpoints are under `/api`.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | Health check |
-| POST | `/api/memories/short-term/:sessionId` | Store session memory |
-| GET | `/api/memories/short-term/:sessionId/:key` | Recall session memory |
-| GET | `/api/memories/short-term/:sessionId` | List session memories |
-| DELETE | `/api/memories/short-term/:sessionId/:key` | Forget session memory |
-| DELETE | `/api/memories/short-term/:sessionId` | Clear session |
-| POST | `/api/memories/long-term` | Store persistent memory |
-| GET | `/api/memories/long-term/:key` | Retrieve persistent memory |
-| DELETE | `/api/memories/long-term/:key` | Remove persistent memory |
-| POST | `/api/memories/long-term/search` | Search persistent memories |
-| POST | `/api/memories/semantic` | Add semantic memory |
-| POST | `/api/memories/semantic/search` | Semantic similarity search |
-| DELETE | `/api/memories/semantic/:key` | Remove semantic memory |
-
-## Programmatic Usage
+The key idea: memories are scoped by `userId`, readable by any app. Tag writes with `appId` to track origin.
 
 ```typescript
-import { MemoryLayer } from "memory-layer";
+// App A writes a preference
+const appA = new MemoryStore({ appId: "settings-app" });
+await appA.set("user-1", "theme", "dark");
 
-const ml = new MemoryLayer();
+// App B reads it — same adapter, different appId
+const appB = new MemoryStore({ adapter: sharedAdapter, appId: "dashboard" });
+const pref = await appB.get("user-1", "theme");
+// pref.value === "dark", pref.appId === "settings-app"
+```
 
-// Short-term (session-scoped, auto-expires)
-await ml.shortTerm.remember("session-1", "mood", "happy");
-await ml.shortTerm.recall("session-1", "mood");
+## Adapters
 
-// Long-term (persistent key-value)
-await ml.longTerm.store("user-pref", "dark mode");
-await ml.longTerm.retrieve("user-pref");
+### In-Memory (default)
 
-// Semantic (vector similarity search)
-await ml.semantic.add("TypeScript is great for building APIs");
-const results = await ml.semantic.search({ text: "building web services" });
+```typescript
+import { MemoryStore, InMemoryAdapter } from "@memory-layer/core";
+
+const store = new MemoryStore({ adapter: new InMemoryAdapter() });
+```
+
+### Supabase
+
+```bash
+npm install @supabase/supabase-js
+```
+
+```typescript
+import { createClient } from "@supabase/supabase-js";
+import { MemoryStore, SupabaseAdapter } from "@memory-layer/core";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const store = new MemoryStore({ adapter: new SupabaseAdapter(supabase) });
+```
+
+Run the migration to create the `memories` table:
+
+```typescript
+import { MIGRATION_SQL } from "@memory-layer/core";
+// Execute MIGRATION_SQL against your Supabase project
+```
+
+## Demo
+
+```bash
+npm run demo
+# Open http://localhost:3210/app-a.html (write preferences)
+# Open http://localhost:3210/app-b.html (read them from another "app")
 ```
 
 ## Development
 
 ```bash
-npm run dev          # dev server with hot reload
-npm test             # run tests
+npm test             # run tests (40 tests)
 npm run typecheck    # type checking
-npm run build        # compile to dist/
+npm run build        # build with tsup (ESM + CJS + .d.ts)
 ```

@@ -1,23 +1,29 @@
 {
-  "name": "memory-layer",
+  "name": "@memory-layer/core",
   "version": "0.1.0",
   "description": "Universal memory layer for AI applications",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "build": "tsc",
-    "start": "tsx src/cli.ts",
-    "dev": "tsx watch src/cli.ts",
+    "build": "tsup && tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo": "tsx demo/server.ts",
+    "prepublishOnly": "npm run build"
   },
   "repository": {
     "type": "git",
@@ -27,8 +33,9 @@
     "ai",
     "memory",
     "llm",
-    "embeddings",
-    "semantic-search"
+    "cross-app",
+    "user-memory",
+    "supabase"
   ],
   "author": "",
   "license": "MIT",
@@ -36,15 +43,20 @@
     "url": "https://github.com/laknanitish2110-sudo/memory-layer/issues"
   },
   "homepage": "https://github.com/laknanitish2110-sudo/memory-layer#readme",
-  "dependencies": {
-    "express": "^5.2.1",
-    "uuid": "^14.0.2"
+  "peerDependencies": {
+    "@supabase/supabase-js": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@supabase/supabase-js": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.49.9",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
-    "@types/uuid": "^10.0.0",
-    "supertest": "^7.3.1",
+    "express": "^5.2.1",
+    "tsup": "^8.5.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"

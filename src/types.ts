@@ -1,53 +1,35 @@
-export interface Memory {
+export interface MemoryRecord {
   id: string;
-  namespace: string;
+  userId: string;
   key: string;
-  content: string;
+  value: unknown;
   metadata: Record<string, unknown>;
-  embedding?: number[];
+  appId?: string;
   createdAt: string;
   updatedAt: string;
-  expiresAt?: string;
 }
 
-export interface MemoryQuery {
-  namespace?: string;
-  key?: string;
+export interface ListOptions {
+  appId?: string;
   metadata?: Record<string, unknown>;
   limit?: number;
   offset?: number;
 }
 
-export interface SemanticQuery {
-  namespace?: string;
-  text?: string;
-  embedding?: number[];
-  topK?: number;
-  threshold?: number;
+export interface Adapter {
+  get(userId: string, key: string): Promise<MemoryRecord | null>;
+  set(record: MemoryRecord): Promise<void>;
+  delete(userId: string, key: string): Promise<boolean>;
+  list(userId: string, options?: ListOptions): Promise<MemoryRecord[]>;
+  clear(userId: string): Promise<void>;
 }
 
-export interface SemanticResult {
-  memory: Memory;
-  score: number;
+export interface MemoryStoreOptions {
+  adapter?: Adapter;
+  appId?: string;
 }
 
-export interface StorageAdapter {
-  get(namespace: string, key: string): Promise<Memory | null>;
-  set(memory: Memory): Promise<void>;
-  delete(namespace: string, key: string): Promise<boolean>;
-  list(query: MemoryQuery): Promise<Memory[]>;
-  clear(namespace?: string): Promise<void>;
-}
-
-export interface EmbeddingProvider {
-  embed(text: string): Promise<number[]>;
-  embedBatch(texts: string[]): Promise<number[][]>;
-  dimensions: number;
-}
-
-export interface MemoryLayerConfig {
-  storage?: StorageAdapter;
-  embedding?: EmbeddingProvider;
-  defaultNamespace?: string;
-  defaultTTL?: number;
+export interface SetOptions {
+  metadata?: Record<string, unknown>;
+  appId?: string;
 }

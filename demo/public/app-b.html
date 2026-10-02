@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>App B — Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 520px; margin: 40px auto; padding: 0 16px; color: #1a1a1a; }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .badge { display: inline-block; background: #8b5cf6; color: #fff; font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; margin-bottom: 20px; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 16px; }
+    input { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; }
+    button { margin-top: 20px; padding: 10px 20px; background: #8b5cf6; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    button:hover { background: #7c3aed; }
+    table { width: 100%; margin-top: 16px; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; font-size: 0.85rem; }
+    th { font-weight: 600; color: #6b7280; font-size: 0.75rem; text-transform: uppercase; }
+    .tag { font-size: 0.7rem; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; color: #6b7280; }
+    .empty { color: #9ca3af; font-style: italic; margin-top: 16px; font-size: 0.85rem; }
+    a { display: block; margin-top: 24px; color: #8b5cf6; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>App B — Dashboard</h1>
+  <span class="badge">appId: dashboard-app</span>
+
+  <label for="userId">User ID</label>
+  <input id="userId" value="user-1" />
+
+  <button onclick="load()">Load User Memory</button>
+
+  <div id="result"></div>
+
+  <a href="/app-a.html">&larr; Open App A (Settings) to set preferences</a>
+
+  <script>
+    async function load() {
+      const userId = document.getElementById('userId').value;
+      const res = await fetch(`/api/memories/${encodeURIComponent(userId)}`);
+      const memories = await res.json();
+
+      if (memories.length === 0) {
+        document.getElementById('result').innerHTML =
+          '<p class="empty">No memories found. Go to App A to save some preferences first.</p>';
+        return;
+      }
+
+      const rows = memories.map(m =>
+        `<tr>
+          <td>${m.key}</td>
+          <td>${JSON.stringify(m.value)}</td>
+          <td><span class="tag">${m.appId || '—'}</span></td>
+          <td>${new Date(m.updatedAt).toLocaleTimeString()}</td>
+        </tr>`
+      ).join('');
+
+      document.getElementById('result').innerHTML = `
+        <table>
+          <thead><tr><th>Key</th><th>Value</th><th>Set By</th><th>Updated</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p style="margin-top:12px;font-size:0.8rem;color:#6b7280;">
+          ${memories.length} memories loaded — written by <strong>${[...new Set(memories.map(m => m.appId))].join(', ')}</strong>,
+          readable by any app.
+        </p>`;
+    }
+  </script>
+</body>
+</html>
