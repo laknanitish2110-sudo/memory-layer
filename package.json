@@ -1,0 +1,59 @@
+{
+  "name": "@memory-layer/core",
+  "version": "0.1.0",
+  "description": "Universal memory layer for AI applications. Persistent, cross-session, user-owned memory.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./adapters/localStorage": {
+      "import": "./dist/adapters/localStorage.mjs",
+      "require": "./dist/adapters/localStorage.js",
+      "types": "./dist/adapters/localStorage.d.ts"
+    },
+    "./adapters/supabase": {
+      "import": "./dist/adapters/supabase.mjs",
+      "require": "./dist/adapters/supabase.js",
+      "types": "./dist/adapters/supabase.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/adapters/localStorage.ts src/adapters/supabase.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format esm --dts --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "ai",
+    "memory",
+    "context",
+    "llm",
+    "persistence",
+    "session",
+    "recall"
+  ],
+  "author": "laknanitish2110",
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@supabase/supabase-js": {
+      "optional": true
+    }
+  }
+}
