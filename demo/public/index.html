@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory Layer — Your AI has amnesia. We fix that.</title>
+  <style>
+    :root {
+      --bg: #0b0f1a;
+      --surface: #131829;
+      --surface-2: #1a2035;
+      --border: #2a3150;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59, 130, 246, 0.15);
+      --amber: #f59e0b;
+      --green: #22c55e;
+      --red: #ef4444;
+      --purple: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    /* ---------- NAV ---------- */
+    nav {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 20px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-weight: 800;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: white;
+    }
+    .logo-icon {
+      width: 28px; height: 28px;
+      background: var(--accent);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    nav .links {
+      display: flex;
+      gap: 24px;
+      font-size: 0.85rem;
+    }
+    nav .links a { color: var(--muted); }
+    nav .links a:hover { color: white; text-decoration: none; }
+
+    /* ---------- HERO ---------- */
+    .hero {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 80px 16px 60px;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--amber);
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      padding: 4px 14px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 6vw, 3.8rem);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      letter-spacing: -0.03em;
+    }
+    .hero h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg, #3b82f6, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero .subtitle {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 580px;
+      margin: 0 auto 36px;
+      line-height: 1.6;
+    }
+    .hero-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      padding: 14px 32px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-primary:hover { background: #2563eb; text-decoration: none; }
+    .btn-secondary {
+      padding: 14px 32px;
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-secondary:hover { border-color: var(--muted); text-decoration: none; }
+
+    /* ---------- PROBLEM ---------- */
+    .section {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 80px 16px;
+    }
+    .section-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .section h2 {
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      font-weight: 800;
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+    .section .lead {
+      font-size: 1.05rem;
+      color: var(--muted);
+      max-width: 640px;
+      line-height: 1.7;
+      margin-bottom: 40px;
+    }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .problem-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+    }
+    .problem-card .quote {
+      font-style: italic;
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 12px;
+      line-height: 1.5;
+      border-left: 3px solid var(--border);
+      padding-left: 14px;
+    }
+    .problem-card .count {
+      font-size: 0.8rem;
+      color: var(--red);
+      font-weight: 600;
+    }
+
+    /* ---------- SOLUTION ---------- */
+    .solution-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .solution-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+    }
+    .solution-card .icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 14px;
+    }
+    .solution-card h3 {
+      font-size: 1rem;
+      margin-bottom: 6px;
+    }
+    .solution-card p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ---------- CODE DEMO ---------- */
+    .code-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-top: 40px;
+    }
+    .code-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+    .code-tab {
+      padding: 12px 20px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .code-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .code-panel {
+      padding: 20px 24px;
+      display: none;
+    }
+    .code-panel.active { display: block; }
+    .code-panel pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      overflow-x: auto;
+      font-size: 0.82rem;
+      line-height: 1.7;
+      color: #e2e8f0;
+    }
+    .code-panel pre .kw { color: #c084fc; }
+    .code-panel pre .str { color: #86efac; }
+    .code-panel pre .cmt { color: #64748b; }
+    .code-panel pre .fn { color: #93c5fd; }
+    .code-panel pre .num { color: #fbbf24; }
+
+    .output-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 16px;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      color: var(--green);
+      font-style: italic;
+    }
+    .output-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-top: 16px;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    /* ---------- COMPARISON ---------- */
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 40px;
+    }
+    @media (max-width: 600px) {
+      .comparison { grid-template-columns: 1fr; }
+    }
+    .comparison-card {
+      border-radius: 14px;
+      padding: 24px;
+    }
+    .comparison-card.before {
+      background: rgba(239, 68, 68, 0.05);
+      border: 1px solid rgba(239, 68, 68, 0.15);
+    }
+    .comparison-card.after {
+      background: rgba(34, 197, 94, 0.05);
+      border: 1px solid rgba(34, 197, 94, 0.15);
+    }
+    .comparison-card .tag {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+    }
+    .comparison-card.before .tag { color: var(--red); }
+    .comparison-card.after .tag { color: var(--green); }
+    .comparison-card p {
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .comparison-card p strong { color: var(--text); }
+
+    /* ---------- DEMO CTA ---------- */
+    .demo-cta {
+      text-align: center;
+      padding: 80px 16px;
+      background: linear-gradient(180deg, var(--bg) 0%, var(--surface) 100%);
+      border-top: 1px solid var(--border);
+    }
+    .demo-cta h2 {
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      font-weight: 800;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+    .demo-cta p {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 32px;
+      max-width: 500px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .demo-cards {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    .demo-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 24px;
+      text-align: left;
+      width: 300px;
+      text-decoration: none;
+      color: var(--text);
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .demo-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      text-decoration: none;
+    }
+    .demo-card .step {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .demo-card h3 { font-size: 1rem; margin-bottom: 6px; }
+    .demo-card p { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+
+    /* ---------- FOOTER ---------- */
+    footer {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 40px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    footer .left {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    footer .right {
+      display: flex;
+      gap: 20px;
+      font-size: 0.8rem;
+    }
+    footer .right a { color: var(--muted); }
+    footer .right a:hover { color: white; }
+
+    @media (max-width: 600px) {
+      .hero { padding: 48px 16px 40px; }
+      .section { padding: 48px 16px; }
+      nav .links { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="logo">
+      <div class="logo-icon">M</div>
+      Memory Layer
+    </div>
+    <div class="links">
+      <a href="#problem">Problem</a>
+      <a href="#solution">Solution</a>
+      <a href="#code">Code</a>
+      <a href="#demo">Try Demo</a>
+      <a href="https://github.com/laknanitish2110-sudo/memory-layer">GitHub</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-badge">Open Source &middot; User-Owned &middot; Cross-App</div>
+    <h1>Your AI has amnesia.<br/><em>We fix that.</em></h1>
+    <p class="subtitle">Memory Layer is the universal memory system for AI applications. One identity, emotional context, and understanding &mdash; across every AI tool you use.</p>
+    <div class="hero-buttons">
+      <a href="#demo" class="btn-primary">Try the Live Demo &rarr;</a>
+      <a href="https://github.com/laknanitish2110-sudo/memory-layer" class="btn-secondary">View on GitHub</a>
+    </div>
+  </section>
+
+  <!-- PROBLEM -->
+  <section class="section" id="problem">
+    <div class="section-label">The Problem</div>
+    <h2>You are a stranger to every AI you've ever used.</h2>
+    <p class="lead">You've spent hundreds of hours with ChatGPT, Claude, Gemini, coding assistants, tutors. Ask any of them what you struggled with last week. They'll say "I don't have access to previous conversations." <strong>You</strong> have become the memory system.</p>
+
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="quote">"I'm a beginner at Python, I prefer examples over theory"</div>
+        <div class="count">Typed for the 50th time</div>
+      </div>
+      <div class="problem-card">
+        <div class="quote">"Remember, I was working on a React project with..."</div>
+        <div class="count">Re-explaining context every session</div>
+      </div>
+      <div class="problem-card">
+        <div class="quote">"Last time we discussed recursion and I was confused about..."</div>
+        <div class="count">YOU remembering for the AI</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SOLUTION -->
+  <section class="section" id="solution">
+    <div class="section-label">The Solution</div>
+    <h2>Memory that understands, not just remembers.</h2>
+    <p class="lead">Memory Layer doesn't store chat logs. It builds <strong>understanding</strong> &mdash; who you are, how you learn, what frustrates you, and what you're working toward. Then any AI app can tap into that understanding.</p>
+
+    <div class="solution-grid">
+      <div class="solution-card">
+        <div class="icon" style="background:rgba(168,85,247,0.1);color:var(--purple);">&#x1f9e0;</div>
+        <h3>Emotional Context</h3>
+        <p>Tracks <em>how</em> you felt, not just <em>what</em> you said. "You were frustrated last time" changes how AI approaches you. That's empathy, not recall.</p>
+      </div>
+      <div class="solution-card">
+        <div class="icon" style="background:rgba(59,130,246,0.1);color:var(--accent);">&#x1f310;</div>
+        <h3>Cross-App</h3>
+        <p>Works across ChatGPT, Claude, coding tools, tutors &mdash; any AI application. One memory, everywhere. Your tutor session informs your code assistant.</p>
+      </div>
+      <div class="solution-card">
+        <div class="icon" style="background:rgba(34,197,94,0.1);color:var(--green);">&#x1f512;</div>
+        <h3>User-Owned</h3>
+        <p>Like "Sign In with Google" but for AI memory. You control what apps access, delete, export, and port your data. The platforms don't own you.</p>
+      </div>
+      <div class="solution-card">
+        <div class="icon" style="background:rgba(245,158,11,0.1);color:var(--amber);">&#x26a1;</div>
+        <h3>Understanding, Not Data</h3>
+        <p><code>contextForAI()</code> returns compressed natural language &mdash; not 500 raw chat logs, but one paragraph that tells the AI who you are.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CODE -->
+  <section class="section" id="code">
+    <div class="section-label">How It Works</div>
+    <h2>Four lines to give your AI a memory.</h2>
+    <p class="lead">Install the SDK, track interactions, set traits, and call <code>contextForAI()</code>. That's it. Your AI now knows who it's talking to.</p>
+
+    <div class="code-section">
+      <div class="code-tabs">
+        <div class="code-tab active" onclick="showTab('install')">Install</div>
+        <div class="code-tab" onclick="showTab('track')">Track</div>
+        <div class="code-tab" onclick="showTab('context')">Context</div>
+        <div class="code-tab" onclick="showTab('output')">Output</div>
+      </div>
+
+      <div class="code-panel active" id="tab-install">
+<pre><span class="cmt">// Install</span>
+npm install @memory-layer/core
+
+<span class="cmt">// Set up</span>
+<span class="kw">import</span> { MemoryStore, UserProfile, InMemoryAdapter } <span class="kw">from</span> <span class="str">"@memory-layer/core"</span>;
+
+<span class="kw">const</span> store = <span class="kw">new</span> <span class="fn">MemoryStore</span>({ appId: <span class="str">"my-app"</span> });
+<span class="kw">const</span> profile = <span class="kw">new</span> <span class="fn">UserProfile</span>(store, <span class="str">"user-123"</span>);</pre>
+      </div>
+
+      <div class="code-panel" id="tab-track">
+<pre><span class="cmt">// Track how the user is doing, not just what they said</span>
+<span class="kw">await</span> profile.<span class="fn">trackInteraction</span>({
+  topic: <span class="str">"recursion"</span>,
+  sentiment: <span class="str">"frustrated"</span>,
+  engagement: <span class="num">0.3</span>,
+  frustrationTrigger: <span class="str">"abstract explanations without code"</span>,
+});
+
+<span class="cmt">// Set user traits — skills, preferences, goals</span>
+<span class="kw">await</span> profile.<span class="fn">setTrait</span>(<span class="str">"learning_style"</span>, {
+  category: <span class="str">"preference"</span>,
+  value: <span class="str">"code examples first, theory second"</span>,
+});
+
+<span class="kw">await</span> profile.<span class="fn">setTrait</span>(<span class="str">"python"</span>, {
+  category: <span class="str">"skill"</span>,
+  value: <span class="str">"Python"</span>,
+  confidence: <span class="num">0.35</span>,
+});</pre>
+      </div>
+
+      <div class="code-panel" id="tab-context">
+<pre><span class="cmt">// In a DIFFERENT app — same user, shared memory</span>
+<span class="kw">const</span> codeAssistant = <span class="kw">new</span> <span class="fn">MemoryStore</span>({ appId: <span class="str">"code-assistant"</span> });
+<span class="kw">const</span> profile = <span class="kw">new</span> <span class="fn">UserProfile</span>(codeAssistant, <span class="str">"user-123"</span>);
+
+<span class="cmt">// One call. One paragraph. Full understanding.</span>
+<span class="kw">const</span> context = <span class="kw">await</span> profile.<span class="fn">contextForAI</span>();
+
+<span class="cmt">// Feed it to your AI prompt</span>
+<span class="kw">const</span> response = <span class="kw">await</span> llm.<span class="fn">chat</span>({
+  system: <span class="str">`You are a coding assistant. Here is what you
+know about the user:\n\n${context}`</span>,
+  messages: conversation,
+});</pre>
+      </div>
+
+      <div class="code-panel" id="tab-output">
+        <div class="output-label">contextForAI() returns:</div>
+        <div class="output-box">"This user prefers code examples first, theory second. They are beginner at python and advanced at sql. They tend to get frustrated with abstract explanations without code. In their most recent session, they were frustrated. Recently they have been working on recursion. Their goals: deploy a Python API to production by end of month."</div>
+        <p style="font-size:0.8rem;color:var(--muted);margin-top:14px;line-height:1.5;">That's not a stat dump. That's <strong style="color:var(--text)">understanding</strong>. One paragraph that changes how any AI talks to this user.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- BEFORE/AFTER -->
+  <section class="section">
+    <div class="section-label">Before &amp; After</div>
+    <h2>What changes when AI actually knows you.</h2>
+
+    <div class="comparison">
+      <div class="comparison-card before">
+        <div class="tag">Without Memory Layer</div>
+        <p><strong>User:</strong> "Help me with recursion"<br><br>
+        <strong>AI:</strong> "Recursion is a technique where a function calls itself. The key concept is a base case that stops the recursion..."<br><br>
+        <em>Same generic explanation that frustrated them last time.</em></p>
+      </div>
+      <div class="comparison-card after">
+        <div class="tag">With Memory Layer</div>
+        <p><strong>User:</strong> "Help me with recursion"<br><br>
+        <strong>AI:</strong> "I know abstract explanations haven't worked for you. Here's recursion as actual code you can trace line by line..."<br><br>
+        <em>Adapted to their frustration history and learning style.</em></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO CTA -->
+  <section class="demo-cta" id="demo">
+    <h2>See it yourself.</h2>
+    <p>Two apps, one memory. Complete a tutoring session, then open the code assistant. Watch the magic happen.</p>
+    <div class="demo-cards">
+      <a href="/tutor.html" class="demo-card">
+        <div class="step">Step 1</div>
+        <h3>Open TutorAI</h3>
+        <p>Learn Python, struggle with recursion, give feedback. The tutor tracks your emotional state.</p>
+      </a>
+      <a href="/assistant.html" class="demo-card">
+        <div class="step">Step 2</div>
+        <h3>Open CodeAssist</h3>
+        <p>A different app that has never seen your tutor sessions — but instantly knows how to help you.</p>
+      </a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="left">&copy; 2024 Memory Layer. Open source under MIT license.</div>
+    <div class="right">
+      <a href="https://github.com/laknanitish2110-sudo/memory-layer">GitHub</a>
+      <a href="https://www.npmjs.com/package/@memory-layer/core">npm</a>
+    </div>
+  </footer>
+
+  <script>
+    function showTab(name) {
+      document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.code-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      event.target.classList.add('active');
+    }
+  </script>
+
+</body>
+</html>

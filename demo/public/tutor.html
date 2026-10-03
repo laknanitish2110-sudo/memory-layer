@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TutorAI — Learn Python</title>
+  <style>
+    :root {
+      --bg: #fffbf5;
+      --surface: #ffffff;
+      --border: #f0e6d6;
+      --text: #1c1917;
+      --muted: #78716c;
+      --accent: #ea580c;
+      --accent-light: #fff7ed;
+      --accent-dark: #c2410c;
+      --green: #16a34a;
+      --green-light: #f0fdf4;
+      --blue: #2563eb;
+      --blue-light: #eff6ff;
+      --red: #dc2626;
+      --red-light: #fef2f2;
+      --purple: #7c3aed;
+      --purple-light: #f5f3ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .header-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 1rem; font-weight: 700; }
+    .header p { font-size: 0.75rem; color: var(--muted); }
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .user-badge {
+      font-size: 0.75rem;
+      background: var(--accent-light);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .chat-container {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 24px 16px 120px;
+    }
+    .message {
+      margin-bottom: 16px;
+      animation: fadeUp 0.3s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .tutor-msg {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px 16px 16px 4px;
+      padding: 14px 18px;
+      max-width: 85%;
+      line-height: 1.6;
+      font-size: 0.9rem;
+    }
+    .tutor-msg code {
+      background: #fef3c7;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .tutor-msg pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 10px 0;
+      overflow-x: auto;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+    .tutor-msg pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+    }
+    .user-msg {
+      background: var(--accent);
+      color: white;
+      border-radius: 16px 16px 4px 16px;
+      padding: 10px 16px;
+      max-width: 70%;
+      margin-left: auto;
+      font-size: 0.9rem;
+    }
+
+    .choices {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+      margin-bottom: 16px;
+    }
+    .choices button {
+      padding: 8px 16px;
+      border: 2px solid var(--border);
+      border-radius: 20px;
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.15s;
+      color: var(--text);
+    }
+    .choices button:hover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+    .choices button.positive { border-color: #bbf7d0; }
+    .choices button.positive:hover { background: var(--green-light); border-color: var(--green); }
+    .choices button.confused { border-color: #c4b5fd; }
+    .choices button.confused:hover { background: var(--purple-light); border-color: var(--purple); }
+    .choices button.frustrated { border-color: #fca5a5; }
+    .choices button.frustrated:hover { background: var(--red-light); border-color: var(--red); }
+
+    .memory-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      animation: fadeUp 0.3s ease;
+    }
+    .memory-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 1s ease infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .setup-screen {
+      max-width: 400px;
+      margin: 80px auto;
+      padding: 0 16px;
+      text-align: center;
+    }
+    .setup-screen h2 {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+    }
+    .setup-screen p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 24px;
+    }
+    .setup-screen input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      font-size: 1rem;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .setup-screen input:focus { border-color: var(--accent); }
+    .setup-screen .start-btn {
+      margin-top: 16px;
+      width: 100%;
+      padding: 14px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .setup-screen .start-btn:hover { background: var(--accent-dark); }
+
+    .session-end {
+      text-align: center;
+      padding: 32px 20px;
+      background: var(--surface);
+      border: 2px solid var(--accent);
+      border-radius: 16px;
+      margin-top: 24px;
+      animation: fadeUp 0.4s ease;
+    }
+    .session-end h3 {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+    .session-end p {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .session-end a {
+      display: inline-block;
+      padding: 12px 28px;
+      background: #2563eb;
+      color: white;
+      text-decoration: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: background 0.15s;
+    }
+    .session-end a:hover { background: #1d4ed8; }
+
+    .step-counter {
+      text-align: center;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon">T</div>
+    <div>
+      <h1>TutorAI</h1>
+      <p>Python & Computer Science</p>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge" style="display:none"></span>
+    </div>
+  </div>
+
+  <div id="setup" class="setup-screen">
+    <h2>Start a Tutoring Session</h2>
+    <p>Enter a user ID to begin. Use the same ID in the Code Assistant to see cross-app memory in action.</p>
+    <input id="userId" value="nitish" placeholder="Your user ID" />
+    <button class="start-btn" onclick="startSession()">Begin Lesson</button>
+  </div>
+
+  <div id="chat" class="chat-container" style="display:none">
+    <div class="progress-bar"><div class="progress-fill" id="progress" style="width:0%"></div></div>
+    <div id="messages"></div>
+  </div>
+
+  <script>
+    let userId = '';
+    const messages = document.getElementById('messages');
+    let step = 0;
+    const totalSteps = 7;
+
+    function startSession() {
+      userId = document.getElementById('userId').value.trim();
+      if (!userId) return;
+      document.getElementById('setup').style.display = 'none';
+      document.getElementById('chat').style.display = 'block';
+      document.getElementById('userBadge').textContent = userId;
+      document.getElementById('userBadge').style.display = 'block';
+      resetUser().then(() => runStep(1));
+    }
+
+    async function resetUser() {
+      await fetch(`/api/profile/${encodeURIComponent(userId)}/reset`, { method: 'POST' });
+    }
+
+    function updateProgress(s) {
+      document.getElementById('progress').style.width = `${(s / totalSteps) * 100}%`;
+    }
+
+    function addTutor(html) {
+      const div = document.createElement('div');
+      div.className = 'message';
+      div.innerHTML = `<div class="tutor-msg">${html}</div>`;
+      messages.appendChild(div);
+      scrollDown();
+    }
+
+    function addUser(text) {
+      const div = document.createElement('div');
+      div.className = 'message';
+      div.innerHTML = `<div class="user-msg">${text}</div>`;
+      messages.appendChild(div);
+      scrollDown();
+    }
+
+    function addMemoryIndicator(text) {
+      const div = document.createElement('div');
+      div.className = 'memory-indicator';
+      div.innerHTML = `<span class="memory-dot"></span> ${text}`;
+      messages.appendChild(div);
+      scrollDown();
+    }
+
+    function addChoices(options) {
+      return new Promise(resolve => {
+        const div = document.createElement('div');
+        div.className = 'choices';
+        options.forEach(opt => {
+          const btn = document.createElement('button');
+          btn.textContent = opt.label;
+          btn.className = opt.style || '';
+          btn.onclick = () => {
+            div.remove();
+            resolve(opt);
+          };
+        });
+        div.querySelectorAll = div.querySelectorAll;
+        options.forEach((opt, i) => {
+          div.appendChild(div.children ? div.lastChild || createBtn(opt) : createBtn(opt));
+        });
+        div.innerHTML = '';
+        options.forEach(opt => {
+          const btn = document.createElement('button');
+          btn.textContent = opt.label;
+          btn.className = opt.style || '';
+          btn.onclick = () => {
+            div.remove();
+            resolve(opt);
+          };
+          div.appendChild(btn);
+        });
+        messages.appendChild(div);
+        scrollDown();
+      });
+    }
+
+    function scrollDown() {
+      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50);
+    }
+
+    function wait(ms) {
+      return new Promise(r => setTimeout(r, ms));
+    }
+
+    async function api(path, body) {
+      const res = await fetch(`/api/profile/${encodeURIComponent(userId)}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return res.json();
+    }
+
+    async function runStep(s) {
+      step = s;
+      updateProgress(s);
+
+      if (s === 1) {
+        await wait(400);
+        addTutor("Hey there! I'm <strong>TutorAI</strong>, your Python tutor. Before we dive in, how do you prefer to learn?");
+        const choice = await addChoices([
+          { label: "Code examples first", style: "positive", value: "concise code examples with inline comments" },
+          { label: "Step-by-step theory", style: "", value: "detailed theory with step-by-step explanations" },
+          { label: "Mix of both", style: "", value: "mix of theory and hands-on examples" },
+        ]);
+        addUser(choice.label);
+        await api('/trait', {
+          name: 'learning_style',
+          trait: { category: 'preference', value: choice.value },
+          appId: 'tutor-app',
+        });
+        addMemoryIndicator("Memory saved: learning preference");
+        await wait(600);
+        runStep(2);
+      }
+
+      else if (s === 2) {
+        addTutor(`Great choice! Let's start with <strong>Python basics</strong>. Here's a list comprehension — a compact way to build lists:
+<pre><code>squares = [x**2 for x in range(10)]
+# [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+
+# Same thing with a loop:
+squares = []
+for x in range(10):
+    squares.append(x**2)</code></pre>
+The list comprehension does the same work in one line. How's that feel?`);
+        const choice = await addChoices([
+          { label: "Got it! Makes sense", style: "positive", sentiment: "positive", engagement: 0.8, moment: "understood list comprehensions" },
+          { label: "Need more examples", style: "confused", sentiment: "confused", engagement: 0.5 },
+          { label: "Totally lost", style: "frustrated", sentiment: "frustrated", engagement: 0.2 },
+        ]);
+        addUser(choice.label);
+        await api('/interact', {
+          topic: 'Python basics — list comprehensions',
+          sentiment: choice.sentiment,
+          engagement: choice.engagement,
+          learningMoment: choice.moment,
+          appId: 'tutor-app',
+        });
+        await api('/trait', {
+          name: 'python',
+          trait: { category: 'skill', value: 'Python', confidence: 0.35 },
+          appId: 'tutor-app',
+        });
+        addMemoryIndicator("Memory saved: Python interaction + skill level");
+        await wait(600);
+        runStep(3);
+      }
+
+      else if (s === 3) {
+        addTutor("Quick check — how comfortable are you with <strong>SQL</strong> already?");
+        const choice = await addChoices([
+          { label: "Very comfortable", style: "positive", confidence: 0.85 },
+          { label: "Know the basics", style: "", confidence: 0.5 },
+          { label: "Never used it", style: "confused", confidence: 0.1 },
+        ]);
+        addUser(choice.label);
+        await api('/trait', {
+          name: 'sql',
+          trait: { category: 'skill', value: 'SQL', confidence: choice.confidence },
+          appId: 'tutor-app',
+        });
+        addMemoryIndicator("Memory saved: SQL skill level");
+        await wait(600);
+        runStep(4);
+      }
+
+      else if (s === 4) {
+        addTutor(`Now let's tackle something harder: <strong>recursion</strong>.<br><br>Recursion is a technique where a function calls itself to solve smaller instances of the same problem. The key components are:<br><br>
+<em>1. Base case</em> — the condition that stops the recursion<br>
+<em>2. Recursive case</em> — where the function calls itself with a smaller input<br><br>
+The function keeps calling itself, building up a call stack, until it reaches the base case, at which point the results propagate back up through the stack frames...<br><br>
+How are you following so far?`);
+        const choice = await addChoices([
+          { label: "Makes sense", style: "positive", sentiment: "positive", engagement: 0.7 },
+          { label: "Kind of lost...", style: "confused", sentiment: "confused", engagement: 0.4, trigger: "abstract explanations without concrete examples" },
+          { label: "I need actual code, not theory", style: "frustrated", sentiment: "frustrated", engagement: 0.2, trigger: "abstract explanations without concrete examples" },
+        ]);
+        addUser(choice.label);
+        await api('/interact', {
+          topic: 'recursion',
+          sentiment: choice.sentiment,
+          engagement: choice.engagement,
+          frustrationTrigger: choice.trigger,
+          appId: 'tutor-app',
+        });
+        addMemoryIndicator("Memory saved: recursion interaction" + (choice.trigger ? " + frustration trigger" : ""));
+        await wait(600);
+        runStep(5);
+      }
+
+      else if (s === 5) {
+        addTutor(`Let me try another way to explain it.<br><br>Think of recursion like <strong>Russian nesting dolls</strong>. Each doll contains a smaller version of itself. Similarly, a recursive function contains a call to a smaller version of the same problem.<br><br>Or think of it like looking into two mirrors facing each other — each reflection contains another reflection, going deeper and deeper...<br><br>The "base case" is like the smallest doll that doesn't open — it stops the nesting.<br><br>Does that analogy help?`);
+        const choice = await addChoices([
+          { label: "OK, I think I see it", style: "", sentiment: "neutral", engagement: 0.4 },
+          { label: "Still confused by analogies", style: "confused", sentiment: "confused", engagement: 0.3, trigger: "analogies instead of real code" },
+          { label: "Please just show me CODE", style: "frustrated", sentiment: "frustrated", engagement: 0.15, trigger: "walls of theory text without code examples" },
+        ]);
+        addUser(choice.label);
+        await api('/interact', {
+          topic: 'recursion',
+          sentiment: choice.sentiment,
+          engagement: choice.engagement,
+          frustrationTrigger: choice.trigger,
+          appId: 'tutor-app',
+        });
+        addMemoryIndicator("Memory saved: recursion struggle" + (choice.trigger ? " + frustration trigger" : ""));
+        await wait(600);
+        runStep(6);
+      }
+
+      else if (s === 6) {
+        addTutor("Before we wrap up — what's your current learning goal?");
+        const choice = await addChoices([
+          { label: "Deploy a Python API to production", style: "positive", value: "deploy a Python API to production by end of month" },
+          { label: "Build a full-stack web app", style: "", value: "build a full-stack web app with Python backend" },
+          { label: "Just exploring, no specific goal", style: "", value: "explore Python and computer science fundamentals" },
+        ]);
+        addUser(choice.label);
+        await api('/trait', {
+          name: 'primary_goal',
+          trait: { category: 'goal', value: choice.value },
+          appId: 'tutor-app',
+        });
+        await api('/trait', {
+          name: 'docker_goal',
+          trait: { category: 'goal', value: 'learn Docker and containerization' },
+          appId: 'tutor-app',
+        });
+        addMemoryIndicator("Memory saved: learning goals");
+        await wait(600);
+        runStep(7);
+      }
+
+      else if (s === 7) {
+        updateProgress(totalSteps);
+        addTutor("That's a wrap for today's session! Great work getting through the material. We'll pick up recursion next time with a different approach.");
+        await wait(800);
+        const endDiv = document.createElement('div');
+        endDiv.className = 'session-end';
+        endDiv.innerHTML = `
+          <h3>Session Complete</h3>
+          <p>Memory Layer tracked your learning style, skill levels, emotional responses, and frustration triggers across this entire session.<br><br>
+          Now open the <strong>Code Assistant</strong> — a completely different app — and watch what happens when it reads your memory.</p>
+          <a href="/assistant.html?userId=${encodeURIComponent(userId)}">Open Code Assistant &rarr;</a>
+        `;
+        messages.appendChild(endDiv);
+        scrollDown();
+      }
+    }
+  </script>
+</body>
+</html>

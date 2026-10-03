@@ -1,69 +1,78 @@
-export interface UserProfile {
-  id: string;
-  createdAt: number;
-  lastActiveAt: number;
-  totalSessions: number;
-  totalTimeMinutes: number;
-  metadata: Record<string, unknown>;
-  preferences: Record<string, unknown>;
-  patterns: {
-    dominantStates: string[];
-    avgEngagement: number;
-    triggers: string[];
-  };
-}
-
-export interface SessionRecord {
+export interface MemoryRecord {
   id: string;
   userId: string;
-  appId: string;
-  startedAt: number;
-  endedAt: number | null;
-  durationMinutes: number;
-  context: Record<string, unknown>;
-  summary: string;
-  tags: string[];
-  lastMessage: string;
+  key: string;
+  value: unknown;
+  metadata: Record<string, unknown>;
+  appId?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface SessionPlan {
-  createdAt: number;
-  targetDate: string | null;
-  goals: string[];
-  appId: string;
-  context: Record<string, unknown>;
-  notes: string;
+export interface ListOptions {
+  appId?: string;
+  metadata?: Record<string, unknown>;
+  limit?: number;
+  offset?: number;
 }
 
-export interface MemorySnapshot {
-  profile: UserProfile;
-  sessions: SessionRecord[];
-  activePlan: SessionPlan | null;
-  lastSession: SessionRecord | null;
+export interface Adapter {
+  get(userId: string, key: string): Promise<MemoryRecord | null>;
+  set(record: MemoryRecord): Promise<void>;
+  delete(userId: string, key: string): Promise<boolean>;
+  list(userId: string, options?: ListOptions): Promise<MemoryRecord[]>;
+  clear(userId: string): Promise<void>;
 }
 
-export interface RecallContext {
-  isReturningUser: boolean;
-  timeSinceLastSession: string;
-  summary: string;
-  lastAppId: string | null;
-  activePlanSummary: string | null;
-  sessionCount: number;
-  totalMinutes: number;
-  suggestedAction: "continue" | "review" | "new" | "planned";
+export interface MemoryStoreOptions {
+  adapter?: Adapter;
+  appId?: string;
 }
 
-export interface StorageAdapter {
-  get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
-  delete(key: string): Promise<void>;
-  list(prefix: string): Promise<string[]>;
+export interface SetOptions {
+  metadata?: Record<string, unknown>;
+  appId?: string;
 }
 
-export interface MemoryConfig {
-  appId: string;
-  userId?: string;
-  storage: StorageAdapter;
-  maxSessions?: number;
-  namespace?: string;
+// --- Emotional context ---
+
+export type Sentiment =
+  | "positive"
+  | "neutral"
+  | "frustrated"
+  | "confused"
+  | "excited";
+
+export interface Interaction {
+  appId?: string;
+  topic?: string;
+  sentiment?: Sentiment;
+  engagement?: number;
+  duration?: number;
+  frustrationTrigger?: string;
+  learningMoment?: string;
+  tags?: string[];
+  notes?: string;
+}
+
+export interface UserTrait {
+  category: "preference" | "skill" | "behavior" | "goal";
+  value: unknown;
+  confidence?: number;
+}
+
+export interface EmotionalSummary {
+  totalInteractions: number;
+  averageEngagement: number;
+  sentimentDistribution: Record<Sentiment, number>;
+  frustrationTriggers: string[];
+  peakHours: number[];
+  topTopics: string[];
+  recentSentiment: Sentiment | null;
+}
+
+export interface ContextOptions {
+  maxLength?: number;
+  include?: ("traits" | "emotions" | "history" | "goals")[];
+  appId?: string;
 }

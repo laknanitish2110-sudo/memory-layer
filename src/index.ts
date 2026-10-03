@@ -1,13 +1,17 @@
-export { Memory } from "./memory";
-export { MemoryStore } from "./store";
-export { buildRecallContext, buildContextForAI } from "./recall";
-
+export { Memory } from "./memory.js";
+export { MemoryStore } from "./store.js";
+export { UserProfile } from "./profile.js";
+export { InMemoryAdapter } from "./adapters/in-memory.js";
+export { SupabaseAdapter, MIGRATION_SQL } from "./adapters/supabase.js";
 export type {
-  UserProfile,
-  SessionRecord,
-  SessionPlan,
-  MemorySnapshot,
-  RecallContext,
-  StorageAdapter,
-  MemoryConfig,
-} from "./types";
+  MemoryRecord,
+  Adapter,
+  ListOptions,
+  MemoryStoreOptions,
+  SetOptions,
+  Sentiment,
+  Interaction,
+  UserTrait,
+  EmotionalSummary,
+  ContextOptions,
+} from "./types.js";

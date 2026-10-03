@@ -4,14 +4,16 @@
 Universal memory layer for AI applications. Not another data pipeline or conversation exporter — an **understanding layer** that gives any AI app compressed, actionable knowledge about the user across sessions and across apps. Started as a module inside SensAI (emotion-aware AI tutor), now its own project.
 
 ## Repo Structure
-- `src/types.ts` — Core types: UserProfile, SessionRecord, SessionPlan, StorageAdapter
-- `src/store.ts` — MemoryStore class: CRUD for profiles, sessions, plans
-- `src/recall.ts` — Context building: buildRecallContext(), buildContextForAI()
-- `src/memory.ts` — Memory class: high-level API (remember, recall, plan)
+- `src/types.ts` — Core types: MemoryRecord, Adapter, Sentiment, Interaction, UserTrait, EmotionalSummary, ContextOptions
+- `src/store.ts` — MemoryStore class: key-value CRUD with pluggable adapters and cross-app appId tagging
+- `src/memory.ts` — Memory class: wrapper around MemoryRecord with Date parsing and toJSON()
+- `src/profile.ts` — UserProfile class: emotional context layer (trackInteraction, setTrait, contextForAI, getEmotionalSummary)
 - `src/index.ts` — Barrel exports
-- `src/adapters/localStorage.ts` — Browser storage adapter
-- `src/adapters/supabase.ts` — Cloud sync adapter (Supabase)
-- `examples/` — Usage examples
+- `src/adapters/in-memory.ts` — In-memory adapter (Map-based, for dev/testing)
+- `src/adapters/supabase.ts` — Supabase adapter (production persistence with Postgres)
+- `tests/` — 61 vitest tests covering all classes and cross-app scenarios
+- `demo/` — Interactive cross-app demo (TutorAI + CodeAssist + landing page)
+- `FOUNDER-QA.md` — 12 hard founder questions answered honestly
 
 ## The Startup Thesis (Evolved)
 
@@ -65,12 +67,30 @@ Every big player (Apple, Google, OpenAI) benefits from memory SILOS. Portable me
 
 ### The SDK (Current Implementation)
 `@memory-layer/core` — the developer integration point:
-- `memory.remember(key, value)` — store context
-- `memory.recall()` — get compressed, actionable context back (not raw history)
-- `memory.contextForAI()` — inject understanding into any AI prompt
-- `memory.plan(goals)` — plan for next session
-- `memory.updateEngagement(state, rate)` — track emotional/engagement patterns
-- Pluggable storage: localStorage (offline), Supabase (cloud), custom adapters
+
+**MemoryStore** — key-value store with pluggable adapters:
+- `store.set(userId, key, value, { appId, metadata })` — store memory
+- `store.get(userId, key)` — retrieve memory
+- `store.list(userId, { appId, metadata, limit })` — list memories
+- `store.delete(userId, key)` / `store.clear(userId)` — cleanup
+
+**UserProfile** — the emotional context layer (the differentiator):
+- `profile.trackInteraction({ topic, sentiment, engagement, frustrationTrigger, learningMoment })` — track HOW the user felt
+- `profile.setTrait(name, { category, value, confidence })` — set preferences, skills, goals
+- `profile.getTrait(name)` — retrieve a trait
+- `profile.contextForAI({ include, maxLength })` — compressed natural-language understanding paragraph
+- `profile.getEmotionalSummary()` — structured emotional analytics
+
+**Adapters:**
+- `InMemoryAdapter` — Map-based, for dev/testing (default)
+- `SupabaseAdapter` — Postgres persistence with upsert and RLS
+
+### What Needs Building Next (Memory Passport Protocol)
+1. **Permission scopes** — apps request access to categories (skills, preferences, goals, projects, emotional patterns). Users approve/deny
+2. **Memory provenance** — source app, confidence score, timestamp, sensitivity level on every memory
+3. **Revocation signals** — user deletes a memory, connected apps get notified
+4. **Temporal versioning** — contradiction handling instead of overwriting. Most recent + highest confidence wins
+5. **User dashboard** — see/edit/delete/export all AI memories across connected apps
 
 ### Go-to-Market Strategy
 1. **Phase 1:** Sell SDK value to indie devs (AI tutors, coaches, companions). They integrate for good memory, not cross-app
@@ -79,23 +99,30 @@ Every big player (Apple, Google, OpenAI) benefits from memory SILOS. Portable me
 4. **Phase 4:** Memory Passport becomes the protocol. Mem0 plugs into it as a memory engine underneath
 
 ### Key Documents
-- `FOUNDER-QA.md` — 12 hard founder questions answered honestly, with strength scoreboard and identified weak spots. Backbone of the pitch deck.
+- `FOUNDER-QA.md` — 12 hard founder questions answered honestly, with strength scoreboard and identified weak spots. Backbone of the pitch deck
 
 ### Key Design Decisions
-- **Adapter pattern**: StorageAdapter interface so any backend works
-- **Async-first**: All methods return Promises (even localStorage adapter) for universal compatibility
-- **App-scoped**: Each app gets its own namespace, but user profile is shared cross-app
+- **Adapter pattern**: Adapter interface so any backend works (InMemory, Supabase, future: Mem0 as backend)
+- **Async-first**: All methods return Promises for universal compatibility
+- **App-scoped writes, user-scoped reads**: Each write is tagged with appId, but all memories are readable cross-app by userId
 - **Privacy-first**: User owns their data. No tracking, no analytics, no third-party calls
-- **Understanding over data**: recall() returns insight, not dumps
+- **Understanding over data**: contextForAI() returns compressed natural language, not stat dumps
+- **Internal key prefixes**: `_ml:interaction:{uuid}` for interactions, `_ml:trait:{name}` for traits
 
-## Roadmap
-1. **v0.1** (current) — Core types, store, recall, localStorage adapter, Supabase adapter
-2. **v0.2** — Tests, build pipeline, publish to npm
-3. **v0.3** — Supabase migration script, auth integration, real cloud sync
-4. **v0.4** — Smart context engine (relevance scoring, emotional context weighting)
-5. **v0.5** — Demo: same memory working across two different apps
-6. **v0.6** — User-facing memory dashboard (see/edit/delete/export your AI memory)
-7. **v1.0** — Production-ready SDK, docs site, pricing, launch
+## Current State
+- **v0.1** — Core SDK complete: MemoryStore, Memory, UserProfile, InMemoryAdapter, SupabaseAdapter
+- Build: tsup (ESM + CJS) + tsc (declarations). 61 tests passing
+- Demo: interactive cross-app experience (TutorAI + CodeAssist + landing page) at localhost:3210
+- README: polished with pitch, comparison table, full API reference
+- Supabase project created with migration applied
+
+## Roadmap (What's Next)
+1. **v0.2** — Permission scopes: `memory.requestAccess(["skills", "preferences"])`, user approval flow
+2. **v0.3** — Memory provenance: source, confidence, timestamp, sensitivity on every record
+3. **v0.4** — Revocation signals: delete propagation to connected apps
+4. **v0.5** — Temporal versioning: contradiction detection and resolution
+5. **v0.6** — User dashboard: see/edit/delete/export AI memory
+6. **v1.0** — Memory Passport protocol, auth integration, production launch
 
 ## Origin
 - **SensAI repo**: github.com/laknanitish2110-sudo/Ai-Builds
@@ -105,6 +132,7 @@ Every big player (Apple, Google, OpenAI) benefits from memory SILOS. Portable me
 
 ## Tech Stack
 - TypeScript, zero runtime dependencies
-- tsup for bundling (CJS + ESM + DTS)
+- tsup for bundling (CJS + ESM)
+- tsc for declarations (emitDeclarationOnly — tsup DTS incompatible with TS 7)
 - vitest for testing
-- Supabase as optional cloud backend
+- Supabase as optional cloud backend (peer dependency)

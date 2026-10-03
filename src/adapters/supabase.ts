@@ -1,76 +1,116 @@
-import type { StorageAdapter } from "../types";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Adapter, ListOptions, MemoryRecord } from "../types.js";
 
-interface SupabaseClient {
-  from(table: string): {
-    select(columns?: string): {
-      eq(column: string, value: string): {
-        single(): Promise<{ data: Record<string, unknown> | null; error: unknown }>;
-        then(resolve: (result: { data: Record<string, unknown>[] | null; error: unknown }) => void): void;
-      };
-      like(column: string, pattern: string): Promise<{ data: Record<string, unknown>[] | null; error: unknown }>;
-    };
-    upsert(data: Record<string, unknown>): Promise<{ error: unknown }>;
-    delete(): {
-      eq(column: string, value: string): Promise<{ error: unknown }>;
-    };
+const TABLE = "memories";
+
+export const MIGRATION_SQL = `
+create table if not exists memories (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  key text not null,
+  value jsonb not null default '{}',
+  metadata jsonb not null default '{}',
+  app_id text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, key)
+);
+
+create index if not exists idx_memories_user_id on memories (user_id);
+create index if not exists idx_memories_user_key on memories (user_id, key);
+create index if not exists idx_memories_app_id on memories (app_id);
+
+alter table memories enable row level security;
+`;
+
+function toRecord(row: Record<string, unknown>): MemoryRecord {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    key: row.key as string,
+    value: row.value,
+    metadata: (row.metadata ?? {}) as Record<string, unknown>,
+    appId: (row.app_id as string) ?? undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
   };
 }
 
-export interface SupabaseAdapterConfig {
-  client: SupabaseClient;
-  table?: string;
-}
-
-export class SupabaseAdapter implements StorageAdapter {
+export class SupabaseAdapter implements Adapter {
   private client: SupabaseClient;
-  private table: string;
 
-  constructor(config: SupabaseAdapterConfig) {
-    this.client = config.client;
-    this.table = config.table || "memory_layer";
+  constructor(client: SupabaseClient) {
+    this.client = client;
   }
 
-  async get<T>(key: string): Promise<T | null> {
+  async get(userId: string, key: string): Promise<MemoryRecord | null> {
     const { data, error } = await this.client
-      .from(this.table)
-      .select("value")
+      .from(TABLE)
+      .select("*")
+      .eq("user_id", userId)
       .eq("key", key)
-      .single();
+      .maybeSingle();
 
-    if (error || !data) return null;
-    return data.value as T;
+    if (error) throw new Error(`supabase get: ${error.message}`);
+    return data ? toRecord(data) : null;
   }
 
-  async set(key: string, value: unknown): Promise<void> {
-    await this.client.from(this.table).upsert({
-      key,
-      value,
-      updated_at: new Date().toISOString(),
-    });
+  async set(record: MemoryRecord): Promise<void> {
+    const { error } = await this.client.from(TABLE).upsert(
+      {
+        id: record.id,
+        user_id: record.userId,
+        key: record.key,
+        value: record.value,
+        metadata: record.metadata,
+        app_id: record.appId ?? null,
+        created_at: record.createdAt,
+        updated_at: record.updatedAt,
+      },
+      { onConflict: "user_id,key" },
+    );
+
+    if (error) throw new Error(`supabase set: ${error.message}`);
   }
 
-  async delete(key: string): Promise<void> {
-    await this.client.from(this.table).delete().eq("key", key);
+  async delete(userId: string, key: string): Promise<boolean> {
+    const { count, error } = await this.client
+      .from(TABLE)
+      .delete({ count: "exact" })
+      .eq("user_id", userId)
+      .eq("key", key);
+
+    if (error) throw new Error(`supabase delete: ${error.message}`);
+    return (count ?? 0) > 0;
   }
 
-  async list(prefix: string): Promise<string[]> {
-    const { data, error } = await this.client
-      .from(this.table)
-      .select("key")
-      .like("key", `${prefix}%`);
+  async list(userId: string, options: ListOptions = {}): Promise<MemoryRecord[]> {
+    let query = this.client.from(TABLE).select("*").eq("user_id", userId);
 
-    if (error || !data) return [];
-    return data.map((row) => row.key as string);
+    if (options.appId) {
+      query = query.eq("app_id", options.appId);
+    }
+    if (options.metadata) {
+      for (const [k, v] of Object.entries(options.metadata)) {
+        query = query.eq(`metadata->>${k}`, v);
+      }
+    }
+
+    const limit = options.limit ?? 100;
+    const offset = options.offset ?? 0;
+    query = query.range(offset, offset + limit - 1).order("created_at");
+
+    const { data, error } = await query;
+    if (error) throw new Error(`supabase list: ${error.message}`);
+    return (data ?? []).map(toRecord);
+  }
+
+  async clear(userId: string): Promise<void> {
+    const { error } = await this.client
+      .from(TABLE)
+      .delete()
+      .eq("user_id", userId);
+
+    if (error) throw new Error(`supabase clear: ${error.message}`);
   }
 }
-
-export const SUPABASE_MIGRATION = `
-create table if not exists memory_layer (
-  key text primary key,
-  value jsonb not null,
-  updated_at timestamptz default now()
-);
-
-create index if not exists idx_memory_layer_key_prefix
-  on memory_layer using btree (key text_pattern_ops);
-`;
