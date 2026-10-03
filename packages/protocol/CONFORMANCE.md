@@ -1,8 +1,8 @@
 # Protocol Kernel Conformance Matrix
 
-**Version:** M1.5 — Protocol Kernel v0.1 + Persistence Layer + Live DB Conformance  
-**Tests:** 183/183 unit + 35 live DB attack vectors  
-**Status:** All invariants verified against live Postgres. See `packages/persistence/M1.5_CONFORMANCE.md` for full attack report.
+**Version:** M2.0 — Protocol Kernel v0.1 + Persistence Layer + Live DB Conformance + API Contract  
+**Tests:** 183/183 unit + 35 live DB attack vectors + 81 API attack vectors (contract defined)  
+**Status:** All invariants verified through M1.5. M2 API contract and threat model locked. See `packages/api/M2_CONFORMANCE.md` for API layer matrix.
 
 This matrix maps every locked protocol invariant to its implementation and test. If you change any function listed here, you must verify its tests still pass. If you add a new security-relevant dimension, it must appear in this matrix before merging.
 
@@ -84,6 +84,25 @@ This matrix maps every locked protocol invariant to its implementation and test.
 |--------|-----------|--------|
 | FORCE ROW LEVEL SECURITY on all 8 memory tables | `007_force_rls.sql` | M1.5 |
 | REVOKE ALL on memory + credential tables from `anon` | `007_force_rls.sql` | M1.5 |
+
+## M2 — API Layer (Contract Defined)
+
+| Attack Vector | Tests | Target | Status |
+|---------------|-------|--------|--------|
+| Authentication ≠ Authorization | 9 | Auth middleware + kernel authorize() | M2 |
+| Never trust request IDs | 7 | Controller → kernel passport scoping | M2 |
+| IDOR on every entity type | 8 | Passport-scoped repository lookups | M2 |
+| Mass assignment | 9 | Request validation + server-determined fields | M2 |
+| Capability confusion | 8 | Explicit capability → endpoint mapping | M2 |
+| Filter-before-synthesis | 8 | Read pipeline + output validation | M2 |
+| Error leakage | 8 | Error response sanitization | M2 |
+| Rate limits | 8 | Multi-dimensional rate limiting | M2 |
+| API replay | 8 | Idempotency + token rotation + revision | M2 |
+| No kernel bypass | 8 | Static analysis + integration tests | M2 |
+
+See `packages/api/API_CONTRACT.md` for endpoint specifications.  
+See `packages/api/THREAT_MODEL.md` for attack vector details.  
+See `packages/api/M2_CONFORMANCE.md` for full M2 matrix.
 
 ---
 

@@ -1,0 +1,25 @@
+{
+  "name": "@memory-layer/api",
+  "version": "0.2.0",
+  "description": "Memory Passport API Layer — thin HTTP boundary over Protocol Kernel",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run tests/integration",
+    "test:adversarial": "vitest run tests/adversarial"
+  },
+  "dependencies": {
+    "@memory-layer/protocol": "workspace:*",
+    "@memory-layer/persistence": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
