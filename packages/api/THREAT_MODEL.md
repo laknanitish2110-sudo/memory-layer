@@ -220,19 +220,121 @@
 
 ---
 
+## Attack Vector #11: Authentication Context Forgery
+
+**Threat:** An attacker manipulates the security context (`app.passport_id`, `binding_id`, `principal_id`) through request headers, body fields, or query parameters, bypassing the auth middleware.
+
+### Test Cases
+
+| ID | Test | Expected |
+|----|------|----------|
+| 11a | Request header `X-Passport-Id: <other-passport>` — verify auth middleware ignores it | Passport derived from token only |
+| 11b | Request body `{ "passport_id": "<other-passport>", ... }` — verify middleware ignores it | Passport derived from token only |
+| 11c | Query parameter `?passport_id=<other-passport>` — verify middleware ignores it | Passport derived from token only |
+| 11d | Request header `X-Binding-Id: <other-binding>` — verify binding from token | Binding derived from token only |
+| 11e | Verify `SET app.passport_id` is called only by auth middleware, never by controllers (runtime test, not just static analysis) | Intercept DB session — only middleware sets context |
+| 11f | Verify auth middleware rejects requests with no token (no fallback to request-body identity) | 401 — no implicit identity |
+
+**Invariant tested:** The auth middleware is the sole source of truth for request identity. No other code path can influence it.
+
+---
+
+## Attack Vector #12: Token/Binding Mismatch
+
+**Threat:** A valid token is used against a binding or grant that doesn't match the token's claims, or whose state has changed since the token was issued.
+
+### Test Cases
+
+| ID | Test | Expected |
+|----|------|----------|
+| 12a | Token issued for Binding A, request targets Binding B's resources | 404 (passport-scoped lookup finds nothing for the wrong binding's data) |
+| 12b | Token valid, binding revoked between token issuance and request | 403 `BINDING_REVOKED` |
+| 12c | Token valid, grant expired between token issuance and request | 403 `GRANT_EXPIRED` |
+| 12d | Token valid, binding suspended between token issuance and request | 403 `BINDING_SUSPENDED` |
+| 12e | Token valid, grant deactivated (new grant supersedes) between token issuance and request | 403 `GRANT_EXPIRED` (stale grant) |
+| 12f | Token's `family_id` references a revoked token family | 401 `TOKEN_INVALID` |
+| 12g | Token issued at revision N, binding now at revision N+1 (revocation cycle) | 403 `STALE_BINDING_REVISION` |
+
+**Invariant tested:** Token validity is necessary but not sufficient. Binding and grant state are checked live on every request, never assumed from the token.
+
+---
+
+## Attack Vector #13: Content-Type / Parser Attacks
+
+**Threat:** Malformed or adversarial request payloads bypass validation through parser ambiguity.
+
+### Test Cases
+
+| ID | Test | Expected |
+|----|------|----------|
+| 13a | Duplicate JSON keys (`{"subject": "safe", "subject": "protocol.attack"}`) | Reject or use first value — never silently use last |
+| 13b | Unexpected nested objects where scalar expected (`{"value": {"__proto__": "evil"}}`) | 400 `VALIDATION_ERROR` |
+| 13c | `null` vs omitted fields — `{"value": null}` vs `{}` | Explicit null rejected for required fields; omitted fields use defaults or reject |
+| 13d | Array where scalar expected (`{"subject": ["a", "b"]}`) | 400 `VALIDATION_ERROR` |
+| 13e | Prototype pollution keys (`{"__proto__": {...}, "constructor": {...}}`) | Ignored or rejected — no object pollution |
+| 13f | Oversized payload (>1MB body) | 413 `PAYLOAD_TOO_LARGE` — rejected before parsing |
+| 13g | Wrong Content-Type header (`text/plain` with JSON body) | 415 `UNSUPPORTED_MEDIA_TYPE` or 400 |
+| 13h | Valid JSON but unexpected top-level structure (array instead of object) | 400 `VALIDATION_ERROR` |
+
+**Invariant tested:** The domain object is constructed only from fields the contract owns. Parser ambiguity never becomes a security hole.
+
+---
+
+## Attack Vector #14: Authorization Caching
+
+**Threat:** Cached authorization decisions survive binding state changes, allowing stale ALLOW decisions after revocation.
+
+### Test Cases
+
+| ID | Test | Expected |
+|----|------|----------|
+| 14a | Authorize at revision 17 → ALLOW, revoke → revision 18, same credentials → DENY | No stale cache: second request returns 403 |
+| 14b | Authorize with active grant, deactivate grant, same token → DENY | Grant state checked live |
+| 14c | Authorize with `read_claims` capability, remove capability via new grant, same token → DENY | Capability checked against current grant |
+| 14d | Concurrent requests: request A starts authorization, binding revoked, request B arrives — both must get consistent result | Request A that started before revocation may complete (atomic); request B denied |
+| 14e | Authorize, suspend binding (`platform_security`), same token → DENY | Suspension checked live |
+| 14f | Verify no HTTP-level response caching on authorization-dependent endpoints | `Cache-Control: no-store` on all authenticated responses |
+
+**Invariant tested:** Authorization is evaluated live against current state. If caching is introduced, it must be revision-aware and invalidated on any state change.
+
+---
+
+## Attack Vector #15: Kernel Bypass Through Error/Recovery Paths
+
+**Threat:** Error handlers, timeout recovery, or retry logic performs direct persistence outside the kernel, creating an alternate mutation path.
+
+### Test Cases
+
+| ID | Test | Expected |
+|----|------|----------|
+| 15a | Observation ingestion fails mid-pipeline (e.g., DB timeout) — verify no partial state persists | Transaction rolled back; no orphan evidence or claims |
+| 15b | Authorization check fails — verify error handler doesn't write to any store | No AccessEvent, no state change on auth failure |
+| 15c | Idempotent retry after timeout — verify same kernel path, not a direct store write | Retry flows through `ingest()`, not `claimStore.createClaim()` |
+| 15d | Rate limit exceeded — verify rate limiter doesn't interact with claim/evidence stores | Rate check is pre-kernel; no domain state touched |
+| 15e | Request validation failure — verify no kernel or store interaction | Rejected before controller; zero domain side effects |
+| 15f | Exception in controller — verify catch block doesn't perform compensating writes | Error response only; no "cleanup" mutations outside kernel |
+| 15g | Token refresh failure (reuse detected) — verify revocation flows through kernel `refreshTokenFamily()`, not direct store call | Family revocation via kernel function only |
+
+**Invariant tested:** Every code path — success, failure, timeout, retry — either flows through the kernel or performs zero mutations. No exception handler becomes an alternate write path.
+
+---
+
 ## Cross-Cutting Invariants
 
 These span multiple attack vectors and must hold everywhere:
 
 | # | Invariant | Vectors | Verification |
 |---|-----------|---------|--------------|
-| C1 | Passport isolation at every layer | 2, 3, 7 | Every entity lookup is passport-scoped |
-| C2 | No alternate mutation path | 10 | Static analysis + integration tests |
+| C1 | Passport isolation at every layer | 2, 3, 7, 11 | Every entity lookup is passport-scoped |
+| C2 | No alternate mutation path | 10, 15 | Static analysis + integration tests + error path tests |
 | C3 | Error responses are information-free | 3, 7 | All IDOR → 404, all auth failures → generic codes |
-| C4 | Server-determined fields are immutable to clients | 4 | Every POST endpoint ignores controlled fields |
+| C4 | Server-determined fields are immutable to clients | 4, 13 | Every POST endpoint ignores controlled fields; parser attacks rejected |
 | C5 | Capability × DataPolicy is the permission | 1, 5, 6 | `authorize()` checks both dimensions |
 | C6 | Idempotency is deterministic | 9 | Same key + same payload = same result; same key + different payload = 409 |
 | C7 | Rate limits are isolated per binding | 8 | No cross-binding interference |
+| C8 | Auth middleware is sole identity source | 11 | No request field can influence passport/binding identity |
+| C9 | Token state checked live, never cached stale | 12, 14 | Binding/grant state verified on every request |
+| C10 | Error paths perform zero mutations | 15 | Every failure path rolls back or noops |
 
 ---
 
@@ -250,7 +352,12 @@ These span multiple attack vectors and must hold everywhere:
 | #8 Rate Limits | 8 | Multi-dimensional rate limiting | M2 |
 | #9 API Replay | 8 | Idempotency + token rotation + revision | M2 |
 | #10 No Kernel Bypass | 8 | Static analysis + integration tests | M2 |
-| **Total** | **81** | | |
+| #11 Auth Context Forgery | 6 | Auth middleware sole identity source | M2 |
+| #12 Token/Binding Mismatch | 7 | Live state checks on every request | M2 |
+| #13 Parser Attacks | 8 | Request validation + content-type enforcement | M2 |
+| #14 Authorization Caching | 6 | Revision-aware or absent caching | M2 |
+| #15 Error Path Bypass | 7 | Error/recovery flows through kernel or noops | M2 |
+| **Total** | **115** | | |
 
 ---
 
@@ -268,7 +375,12 @@ tests/
 │   ├── error-leakage.test.ts      # Vector #7
 │   ├── rate-limits.test.ts        # Vector #8
 │   ├── replay.test.ts             # Vector #9
-│   └── kernel-bypass.test.ts      # Vector #10
+│   ├── kernel-bypass.test.ts      # Vector #10
+│   ├── context-forgery.test.ts    # Vector #11
+│   ├── token-mismatch.test.ts     # Vector #12
+│   ├── parser-attacks.test.ts     # Vector #13
+│   ├── auth-caching.test.ts       # Vector #14
+│   └── error-path-bypass.test.ts  # Vector #15
 │
 └── integration/           # Happy-path functional tests
     ├── passport.test.ts

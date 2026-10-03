@@ -1,7 +1,7 @@
 # Protocol Kernel Conformance Matrix
 
 **Version:** M2.0 — Protocol Kernel v0.1 + Persistence Layer + Live DB Conformance + API Contract  
-**Tests:** 183/183 unit + 35 live DB attack vectors + 81 API attack vectors (contract defined)  
+**Tests:** 183/183 unit + 35 live DB attack vectors + 115 API attack vectors (contract defined)  
 **Status:** All invariants verified through M1.5. M2 API contract and threat model locked. See `packages/api/M2_CONFORMANCE.md` for API layer matrix.
 
 This matrix maps every locked protocol invariant to its implementation and test. If you change any function listed here, you must verify its tests still pass. If you add a new security-relevant dimension, it must appear in this matrix before merging.
@@ -99,6 +99,11 @@ This matrix maps every locked protocol invariant to its implementation and test.
 | Rate limits | 8 | Multi-dimensional rate limiting | M2 |
 | API replay | 8 | Idempotency + token rotation + revision | M2 |
 | No kernel bypass | 8 | Static analysis + integration tests | M2 |
+| Auth context forgery | 6 | Auth middleware sole identity source | M2 |
+| Token/binding mismatch | 7 | Live state checks on every request | M2 |
+| Parser attacks | 8 | Request validation + content-type enforcement | M2 |
+| Authorization caching | 6 | Revision-aware or absent caching | M2 |
+| Error path bypass | 7 | Error/recovery flows through kernel or noops | M2 |
 
 See `packages/api/API_CONTRACT.md` for endpoint specifications.  
 See `packages/api/THREAT_MODEL.md` for attack vector details.  

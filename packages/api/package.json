@@ -13,10 +13,6 @@
     "test:integration": "vitest run tests/integration",
     "test:adversarial": "vitest run tests/adversarial"
   },
-  "dependencies": {
-    "@memory-layer/protocol": "workspace:*",
-    "@memory-layer/persistence": "workspace:*"
-  },
   "devDependencies": {
     "tsup": "^8.0.0",
     "typescript": "^5.5.0",
