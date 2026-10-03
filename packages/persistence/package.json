@@ -1,0 +1,23 @@
+{
+  "name": "@memory-layer/persistence",
+  "version": "0.1.0",
+  "description": "Supabase/Postgres persistence layer for the Memory Passport Protocol Kernel",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0"
+  },
+  "devDependencies": {
+    "@memory-layer/protocol": "file:../protocol",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
