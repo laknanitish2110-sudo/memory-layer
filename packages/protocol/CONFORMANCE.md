@@ -1,8 +1,8 @@
 # Protocol Kernel Conformance Matrix
 
-**Version:** M0 — Protocol Kernel v0.1  
-**Tests:** 109/109  
-**Status:** All invariants enforced in domain logic. Persistence enforcement pending (M1).
+**Version:** M1 — Protocol Kernel v0.1 + Persistence Layer  
+**Tests:** 183/183 (109 protocol + 74 persistence)  
+**Status:** All invariants enforced in domain logic AND at the database level.
 
 This matrix maps every locked protocol invariant to its implementation and test. If you change any function listed here, you must verify its tests still pass. If you add a new security-relevant dimension, it must appear in this matrix before merging.
 
@@ -37,19 +37,31 @@ This matrix maps every locked protocol invariant to its implementation and test.
 | Sharing policy enforcement | `engine.ts` — `filterClaimsBySharingPolicy()` | `authorization.test.ts` | user_only excluded, explicit_only requires binding | M0 |
 | Self-referential evidence | `write-pipeline.ts` — `first_party` flag, tier cap | `write-pipeline.test.ts` | first_party always true for submitting app | M0 |
 
-## Pending (M1 — Persistence)
+## M1 — Database Enforcement
 
-| Invariant | Required DB Enforcement | Status |
-|-----------|------------------------|--------|
-| Passport isolation | RLS policy on all memory tables | Pending |
-| Idempotency | `UNIQUE(binding_id, idempotency_key)` constraint | Pending |
-| Evidence immutability | No UPDATE on evidence value columns | Pending |
-| ClaimVersion append-only | No UPDATE/DELETE on claim_versions | Pending |
-| Binding revision atomicity | Atomic compare-and-increment in transaction | Pending |
-| Token family CAS | Atomic compare-and-swap at DB level | Pending |
-| Grant versioning | Append-only grants, no in-place mutation | Pending |
-| Cross-passport query prevention | RLS + no cross-passport joins | Pending |
-| Concurrent refresh token safety | Serializable isolation on token family | Pending |
+| Invariant | DB Enforcement | Migration | Test File | Status |
+|-----------|---------------|-----------|-----------|--------|
+| Passport isolation | RLS on all memory tables | `006_rls.sql` | `sql-invariants.test.ts` | M1 |
+| Idempotency | `UNIQUE(binding_id, idempotency_key)` | `003_memory.sql` | `sql-invariants.test.ts` | M1 |
+| Evidence immutability | `enforce_evidence_immutability()` trigger | `003_memory.sql` | `sql-invariants.test.ts` | M1 |
+| ClaimVersion append-only | `prevent_version_mutation()` trigger | `003_memory.sql` | `sql-invariants.test.ts` | M1 |
+| Binding revision atomicity | `check_binding_revision()` FOR UPDATE | `002_bindings.sql` | `sql-invariants.test.ts` | M1 |
+| Token family CAS | `token_family_cas()` FOR UPDATE | `004_credentials.sql` | `token-store.test.ts` | M1 |
+| Grant versioning | `prevent_grant_update()` trigger | `002_bindings.sql` | `sql-invariants.test.ts` | M1 |
+| Cross-passport query prevention | RLS + passport-scoped adapter | `006_rls.sql` | `claim-store.test.ts` | M1 |
+| Protocol namespace | `enforce_protocol_namespace()` trigger | `003_memory.sql` | `sql-invariants.test.ts` | M1 |
+
+## M1 — Supabase Adapter
+
+| Store | Implementation | Test File | Tests | Status |
+|-------|---------------|-----------|-------|--------|
+| ClaimStore | `claim-store.ts` | `claim-store.test.ts` | 12 | M1 |
+| EvidenceStore | `evidence-store.ts` | `evidence-store.test.ts` | 6 | M1 |
+| ObservationStore | `observation-store.ts` | `observation-store.test.ts` | 7 | M1 |
+| BindingStore | `binding-store.ts` | `binding-store.test.ts` | 7 | M1 |
+| GrantStore | `binding-store.ts` | `binding-store.test.ts` | 5 | M1 |
+| TokenFamilyStore | `token-store.ts` | `token-store.test.ts` | 6 | M1 |
+| AccessEventStore | `access-event-store.ts` | — | — | M1 |
 
 ---
 
