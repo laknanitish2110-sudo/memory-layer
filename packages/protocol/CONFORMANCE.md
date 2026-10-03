@@ -1,8 +1,8 @@
 # Protocol Kernel Conformance Matrix
 
-**Version:** M1 — Protocol Kernel v0.1 + Persistence Layer  
-**Tests:** 183/183 (109 protocol + 74 persistence)  
-**Status:** All invariants enforced in domain logic AND at the database level.
+**Version:** M1.5 — Protocol Kernel v0.1 + Persistence Layer + Live DB Conformance  
+**Tests:** 183/183 unit + 35 live DB attack vectors  
+**Status:** All invariants verified against live Postgres. See `packages/persistence/M1.5_CONFORMANCE.md` for full attack report.
 
 This matrix maps every locked protocol invariant to its implementation and test. If you change any function listed here, you must verify its tests still pass. If you add a new security-relevant dimension, it must appear in this matrix before merging.
 
@@ -62,6 +62,28 @@ This matrix maps every locked protocol invariant to its implementation and test.
 | GrantStore | `binding-store.ts` | `binding-store.test.ts` | 5 | M1 |
 | TokenFamilyStore | `token-store.ts` | `token-store.test.ts` | 6 | M1 |
 | AccessEventStore | `access-event-store.ts` | — | — | M1 |
+
+## M1.5 — Live Postgres Conformance (35 attack vectors)
+
+| Attack | Vectors | Target | Result | Migration |
+|--------|---------|--------|--------|-----------|
+| Passport isolation | 6 | RLS cross-passport read/write/update/delete | ALL PASS | `006_rls.sql`, `007_force_rls.sql` |
+| Claim version immutability | 2 | UPDATE/DELETE on claim_versions | ALL PASS | `003_memory.sql` |
+| Evidence immutability | 5 | Modify value columns, retraction, un-retraction | ALL PASS | `003_memory.sql` |
+| Protocol namespace | 3 | `protocol.*` subject/predicate on observations + claims | ALL PASS | `003_memory.sql` |
+| Observation idempotency | 2 | Duplicate (binding_id, idempotency_key), cross-binding reuse | ALL PASS | `003_memory.sql` |
+| Token family CAS | 3 | Correct gen, stale gen (→ revoke), revoked family | ALL PASS | `004_credentials.sql` |
+| Binding revision | 3 | Current/stale revision, FOR UPDATE verification | ALL PASS | `002_bindings.sql` |
+| RLS execution contexts | 7 | anon, authenticated, service_role, postgres (scoped/unscoped) | ALL PASS | `007_force_rls.sql` |
+| SECURITY DEFINER audit | 0 vulns | All 9 functions are SECURITY INVOKER | CLEAN | — |
+| Defense-in-depth | 4 | Grant immutability, event immutability, CHECK constraints | ALL PASS | `002_bindings.sql`, `003_memory.sql` |
+
+## M1.5 — Hardening
+
+| Action | Migration | Status |
+|--------|-----------|--------|
+| FORCE ROW LEVEL SECURITY on all 8 memory tables | `007_force_rls.sql` | M1.5 |
+| REVOKE ALL on memory + credential tables from `anon` | `007_force_rls.sql` | M1.5 |
 
 ---
 
