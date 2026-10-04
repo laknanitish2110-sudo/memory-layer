@@ -1,0 +1,12 @@
+{
+  "name": "fifteen-minute-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/index.ts"
+  },
+  "dependencies": {
+    "@memory-layer/sdk": "file:../../packages/sdk"
+  }
+}
