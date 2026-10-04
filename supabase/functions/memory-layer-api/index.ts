@@ -87,13 +87,16 @@ const refreshTokenDecoder: RefreshTokenDecoder = {
 const appContext: AppContext = {
   stores,
   tokenIssuer: {
-    issueAccessToken: (familyId, bindingId) => ({
-      token_hash: `access_${familyId}_${bindingId}_${Date.now()}`,
-      family_id: familyId, binding_id: bindingId,
-      issued_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3600000).toISOString(),
-    }),
+    issueAccessToken: (familyId, bindingId) => {
+      const expiresAt = new Date(Date.now() + 3600000).toISOString();
+      return {
+        token_hash: `app|${bindingId}|${familyId}|0|${expiresAt}`,
+        family_id: familyId, binding_id: bindingId,
+        issued_at: new Date().toISOString(), expires_at: expiresAt,
+      };
+    },
     issueRefreshToken: (familyId, generation) => ({
-      token_hash: `refresh_${familyId}_gen_${generation}`,
+      token_hash: `refresh|${familyId}|${generation}`,
       family_id: familyId, generation,
       issued_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString(),
     }),

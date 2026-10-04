@@ -25,8 +25,12 @@
  *   SUPABASE_SERVICE_KEY=eyJ... \
  *   node --experimental-strip-types scripts/preflight-security.ts \
  *     --api-url https://your-deployed-api.com \
- *     --alice-key "app|..." \
- *     --bob-key "app|..."
+ *     --alice-refresh "refresh|<family_id>|<generation>" \
+ *     --bob-refresh "refresh|<family_id>|<generation>"
+ *
+ * The script obtains 1-hour access tokens via POST /v1/tokens/refresh,
+ * matching the protocol's v1 locked security posture. This also validates
+ * that the token refresh flow works correctly before any other test.
  *
  * All tests must PASS before any credential is handed to a stranger.
  */
@@ -40,20 +44,20 @@ import { randomUUID } from "node:crypto";
 const { values } = parseArgs({
   options: {
     "api-url": { type: "string" },
-    "alice-key": { type: "string" },
-    "bob-key": { type: "string" },
+    "alice-refresh": { type: "string" },
+    "bob-refresh": { type: "string" },
   },
 });
 
 const API_URL = values["api-url"] ?? process.env.API_URL;
-const ALICE_KEY = values["alice-key"];
-const BOB_KEY = values["bob-key"];
+const ALICE_REFRESH = values["alice-refresh"];
+const BOB_REFRESH = values["bob-refresh"];
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-if (!API_URL || !ALICE_KEY || !BOB_KEY) {
-  console.error("Required: --api-url, --alice-key, --bob-key");
+if (!API_URL || !ALICE_REFRESH || !BOB_REFRESH) {
+  console.error("Required: --api-url, --alice-refresh, --bob-refresh");
   process.exit(1);
 }
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -109,10 +113,7 @@ function extractBindingId(key: string): string {
   return key.split("|")[1];
 }
 
-// ── Parse keys ────────────────────────────────────────────────
-
-const aliceBindingId = extractBindingId(ALICE_KEY);
-const bobBindingId = extractBindingId(BOB_KEY);
+// ── Bootstrap: obtain 1-hour access tokens via refresh flow ──
 
 console.log(`
 ╔══════════════════════════════════════════════════════════════╗
@@ -122,6 +123,53 @@ console.log(`
 
   API URL:       ${API_URL}
   Supabase URL:  ${SUPABASE_URL}
+
+─── Phase 0: Token Refresh Bootstrap ───────────────────────
+`);
+
+async function obtainAccessToken(
+  refreshToken: string,
+  label: string
+): Promise<{ accessToken: string; nextRefreshToken: string } | null> {
+  const res = await api("/v1/tokens/refresh", {
+    method: "POST",
+    body: { refresh_token: refreshToken },
+  });
+  if (res.status !== 200) {
+    record(
+      `0.x ${label} token refresh`,
+      false,
+      `Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`
+    );
+    return null;
+  }
+  const data = (res.body as any)?.data;
+  if (!data?.access_token || !data?.refresh_token) {
+    record(`0.x ${label} token refresh`, false, "Missing access_token or refresh_token in response");
+    return null;
+  }
+  record(
+    `0.x ${label} token refresh → 1-hour access token`,
+    true,
+    `Access token expires: ${data.access_token_expires_at}`
+  );
+  return { accessToken: data.access_token, nextRefreshToken: data.refresh_token };
+}
+
+const aliceTokens = await obtainAccessToken(ALICE_REFRESH, "Alice");
+const bobTokens = await obtainAccessToken(BOB_REFRESH, "Bob");
+
+if (!aliceTokens || !bobTokens) {
+  console.error("\nFATAL: Cannot obtain access tokens via refresh flow. Aborting preflight.");
+  process.exit(1);
+}
+
+const ALICE_KEY = aliceTokens.accessToken;
+const BOB_KEY = bobTokens.accessToken;
+const aliceBindingId = extractBindingId(ALICE_KEY);
+const bobBindingId = extractBindingId(BOB_KEY);
+
+console.log(`
   Alice binding: ${aliceBindingId.slice(0, 8)}…
   Bob binding:   ${bobBindingId.slice(0, 8)}…
 
