@@ -1,110 +1,91 @@
 # Memory Layer
 
-> Universal memory layer for AI applications. Give any AI app persistent, cross-session, user-owned memory.
+Give any AI application persistent, user-owned memory.
 
-## The Problem
-
-Every AI app today has amnesia. Users re-explain context every session. No continuity, no recall, no learning from past interactions.
-
-## The Solution
-
-A pluggable memory layer that any AI application can integrate in minutes:
+Every AI app today has amnesia. Users re-explain themselves every session — their skills, preferences, goals, context. Memory Layer is a universal memory API that any AI application can plug into. Users own their data and control what each app can see.
 
 ```typescript
-import { Memory } from '@memory-layer/core';
-import { LocalStorageAdapter } from '@memory-layer/core/adapters/localStorage';
+import { MemoryLayer } from "@memory-layer/sdk";
 
-const memory = new Memory({
-  appId: 'my-ai-app',
-  storage: new LocalStorageAdapter(),
+const memory = new MemoryLayer({
+  apiKey: process.env.MEMORY_LAYER_KEY,
 });
 
-// Recall past context
-const context = await memory.recall();
-// → { isReturningUser: true, summary: "Last active 3h ago. 12 sessions...", ... }
+// What do we know about this user?
+const ctx = await memory.context();
 
-// Get context string for your AI prompt
-const aiContext = await memory.contextForAI();
-// → "Returning user: 12 past sessions.\nLast active: 3h ago.\n..."
-
-// Remember things
-await memory.remember('favorite_language', 'Python');
-
-// Session tracking
-await memory.startSession({ topic: 'machine learning' });
-// ... user interacts ...
-await memory.endSession('Covered neural networks basics', ['ml', 'neural-nets']);
-
-// Plans
-await memory.plan(['Continue with backpropagation', 'Build a simple NN']);
-```
-
-## Storage Adapters
-
-### localStorage (browser)
-```typescript
-import { LocalStorageAdapter } from '@memory-layer/core/adapters/localStorage';
-
-const memory = new Memory({
-  appId: 'my-app',
-  storage: new LocalStorageAdapter(),
+// Record something new
+await memory.observe({
+  predicate: "learning",
+  value: "Rust",
+  category: "skills",
 });
+
+// Next session: context() returns what you observed
 ```
 
-### Supabase (cloud sync)
-```typescript
-import { SupabaseAdapter } from '@memory-layer/core/adapters/supabase';
-import { createClient } from '@supabase/supabase-js';
+Three methods cover 90% of use cases. The protocol handles user isolation, permissions, evidence tracking, and deduplication automatically.
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-const memory = new Memory({
-  appId: 'my-app',
-  userId: 'user-123',
-  storage: new SupabaseAdapter({ client: supabase }),
-});
+## Get started
+
+```bash
+npm install @memory-layer/sdk
 ```
 
-### Custom adapter
-Implement the `StorageAdapter` interface:
+See the [SDK documentation](packages/sdk/README.md) for the full API reference, or run the [15-minute quickstart](examples/fifteen-minute-app/) to try it.
 
-```typescript
-interface StorageAdapter {
-  get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
-  delete(key: string): Promise<void>;
-  list(prefix: string): Promise<string[]>;
-}
+## How it works
+
+```
+Your AI app
+    ↓
+@memory-layer/sdk          ← thin client: ergonomics + transport + types
+    ↓
+Memory Layer API           ← authentication, validation, rate limiting
+    ↓
+Protocol Kernel            ← authorization, ingestion, context pipeline
+    ↓
+Postgres                   ← durable storage
 ```
 
-## API
+The SDK is intentionally thin. It translates developer intent into HTTP requests. All security decisions — authorization, sensitivity enforcement, passport isolation — happen in the protocol kernel, server-side. The SDK cannot bypass them.
 
-### `Memory`
-| Method | Description |
-|--------|-------------|
-| `recall()` | Get full recall context (returning user status, time since last visit, plan, suggested action) |
-| `contextForAI()` | Get a string to inject into your AI system prompt |
-| `startSession(meta?)` | Begin tracking a session |
-| `endSession(summary?, tags?)` | End and save the current session |
-| `remember(key, value)` | Store a key-value pair in user profile |
-| `get(key)` | Retrieve a stored value |
-| `setPreference(key, value)` | Store a user preference |
-| `plan(goals, notes?)` | Save a plan for next session |
-| `getPlan()` | Get the active plan |
-| `clearPlan()` | Clear the active plan |
-| `updateEngagement(state, rate)` | Track engagement patterns |
+## What the protocol enforces
+
+- **Passport isolation** — each user's data is completely isolated. One user can never access another's memory, even through the same application.
+- **Binding authorization** — each application can only access what the user explicitly allowed.
+- **Grant enforcement** — capabilities, categories, and sensitivity ceilings are checked on every request.
+- **Evidence trail** — every observation is backed by evidence. The system knows what was observed, when, how, and by which application.
+- **Deduplication** — duplicate observations strengthen existing claims instead of creating duplicates.
+- **Claim lifecycle** — observations become claims through a pipeline. Claims can be confirmed, corrected, disputed, or deleted by the user.
+
+You don't need to understand any of this to use the SDK.
 
 ## Architecture
 
 ```
-@memory-layer/core
-├── Memory          — High-level API (remember, recall, plan)
-├── MemoryStore     — CRUD operations on profiles, sessions, plans
-├── Recall          — Context building, time formatting, suggestions
-├── Types           — UserProfile, SessionRecord, SessionPlan, etc.
-└── Adapters
-    ├── localStorage  — Browser storage (works offline)
-    └── supabase      — Cloud sync (multi-device, cross-app)
+packages/
+├── sdk/              @memory-layer/sdk — developer-facing client
+├── api/              HTTP API — Hono application, 19 endpoints
+├── protocol/         Protocol kernel — authorization, ingestion, context
+└── persistence/      Storage layer — Postgres adapter, SQL migrations
+
+examples/
+└── fifteen-minute-app/   Runnable quickstart
 ```
+
+## Test coverage
+
+523 tests across the full stack, no mocks:
+
+| Layer | Tests | What it covers |
+|-------|-------|----------------|
+| Protocol | 109 | Authorization, ingestion, context, credentials, sensitivity |
+| Persistence | 74 | Store contracts, SQL invariants, migration safety |
+| API | 289 | HTTP adversarial (116), kernel adversarial (116), integration (57) |
+| SDK | 51 | E2E through real HTTP stack (19), 15-min flow (1), adversarial (31) |
+
+Every SDK test exercises the full path: SDK → HTTP → Middleware → Controller → Kernel → Repository.
 
 ## Origin
 
