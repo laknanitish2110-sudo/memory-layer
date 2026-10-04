@@ -1,0 +1,16 @@
+{
+  "name": "@memory-layer/deploy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx server.ts",
+    "migrate": "tsx migrate.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.12.0",
+    "@supabase/supabase-js": "^2.0.0",
+    "hono": "^4.13.12",
+    "tsx": "^4.0.0"
+  }
+}

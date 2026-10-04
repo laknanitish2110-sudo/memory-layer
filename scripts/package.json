@@ -1,0 +1,9 @@
+{
+  "name": "@memory-layer/scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0"
+  }
+}
