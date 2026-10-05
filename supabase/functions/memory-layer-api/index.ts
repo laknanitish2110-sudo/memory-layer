@@ -101,13 +101,15 @@ const appContext: AppContext = {
       issued_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString(),
     }),
   },
-  generateId: (prefix) => `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
+  generateId: (_prefix) => crypto.randomUUID(),
   now: () => new Date().toISOString(),
 };
 
 // ═══════════════════════════════════════════════════════════════════
 // HONO APP + ROUTES
 // ═══════════════════════════════════════════════════════════════════
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const app = new Hono().basePath("/memory-layer-api");
 
@@ -236,7 +238,9 @@ app.get("/v1/bindings", aAuth, async (c) => {
 app.post("/v1/bindings/:id/revoke", uAuth, async (c) => {
   const auth = c.get("auth") as UserAuthContext;
   const rid = c.get("requestId");
-  const binding = await ctx.stores.bindings.getBinding(c.req.param("id"));
+  const bindingParamId = c.req.param("id");
+  if (!UUID_RE.test(bindingParamId)) throw new ApiError(404, "NOT_FOUND", "Binding not found", rid);
+  const binding = await ctx.stores.bindings.getBinding(bindingParamId);
   if (!binding || binding.passport_id !== auth.passportId) throw new ApiError(404, "NOT_FOUND", "Binding not found", rid);
   const now = ctx.now();
   const updated = { ...binding, status: "revoked" as const, revision: binding.revision + 1, revoked_at: now };
@@ -248,6 +252,7 @@ app.post("/v1/bindings/:id/revoke", uAuth, async (c) => {
 app.post("/v1/bindings/:id/grants", uAuth, async (c) => {
   const rid = c.get("requestId");
   const bindingId = c.req.param("id");
+  if (!UUID_RE.test(bindingId)) throw new ApiError(404, "NOT_FOUND", "Binding not found", rid);
   const body = await c.req.json().catch(() => { throw new ApiError(400, "VALIDATION_ERROR", "Invalid JSON body", rid); });
   const binding = await ctx.stores.bindings.getBinding(bindingId);
   if (!binding) throw new ApiError(404, "NOT_FOUND", "Binding not found", rid);
@@ -269,7 +274,9 @@ app.post("/v1/bindings/:id/grants", uAuth, async (c) => {
 
 app.post("/v1/grants/:id/consent", uAuth, async (c) => {
   const rid = c.get("requestId");
-  const grant = await ctx.stores.grants.getGrant(c.req.param("id"));
+  const grantParamId = c.req.param("id");
+  if (!UUID_RE.test(grantParamId)) throw new ApiError(404, "NOT_FOUND", "Grant not found", rid);
+  const grant = await ctx.stores.grants.getGrant(grantParamId);
   if (!grant) throw new ApiError(404, "NOT_FOUND", "Grant not found", rid);
   return c.json({ data: { grant: { id: grant.id, version: grant.version, active: grant.active }, consent_record: { id: ctx.generateId("cns"), consent_type: "expansion" } }, meta: { request_id: rid, policy_version: "v0.1.0" } });
 });
@@ -277,7 +284,9 @@ app.post("/v1/grants/:id/consent", uAuth, async (c) => {
 app.post("/v1/grants/:id/revoke", uAuth, async (c) => {
   const auth = c.get("auth") as UserAuthContext;
   const rid = c.get("requestId");
-  const grant = await ctx.stores.grants.getGrant(c.req.param("id"));
+  const grantRevokeId = c.req.param("id");
+  if (!UUID_RE.test(grantRevokeId)) throw new ApiError(404, "NOT_FOUND", "Grant not found", rid);
+  const grant = await ctx.stores.grants.getGrant(grantRevokeId);
   if (!grant) throw new ApiError(404, "NOT_FOUND", "Grant not found", rid);
   const binding = await ctx.stores.bindings.getBinding(grant.binding_id);
   if (!binding || binding.passport_id !== auth.passportId) throw new ApiError(404, "NOT_FOUND", "Grant not found", rid);
@@ -333,6 +342,7 @@ app.post("/v1/observations/:id/retract", aAuth, async (c) => {
   const auth = c.get("auth") as AppAuthContext;
   const requestId = c.get("requestId");
   const obsId = c.req.param("id");
+  if (!UUID_RE.test(obsId)) throw new ApiError(404, "NOT_FOUND", "Observation not found", requestId);
   const authRequest: AuthorizationRequest = { credential_id: `cred_${auth.bindingId}`, binding_id: auth.bindingId, binding_revision: auth.bindingRevision, capability: "retract_own_observation", categories: [], max_sensitivity: "public", purpose: null };
   const decision = authorize(authRequest, auth.binding, auth.grant);
   if (decision.decision === "DENY") throw mapKernelDenyToApiError(decision.reason, requestId);
@@ -369,6 +379,7 @@ app.get("/v1/claims/:id", aAuth, async (c) => {
   const auth = c.get("auth") as AppAuthContext;
   const requestId = c.get("requestId");
   const claimId = c.req.param("id");
+  if (!UUID_RE.test(claimId)) throw new ApiError(404, "NOT_FOUND", "Claim not found", requestId);
 
   const authRequest: AuthorizationRequest = { credential_id: `cred_${auth.bindingId}`, binding_id: auth.bindingId, binding_revision: auth.bindingRevision, capability: "read_claims", categories: auth.grant.data_policy.read.categories as ClaimCategory[], max_sensitivity: auth.grant.data_policy.read.sensitivity_ceiling as Sensitivity, purpose: null };
   const decision = authorize(authRequest, auth.binding, auth.grant);
@@ -391,6 +402,7 @@ function userClaimHandler(action: UserMemoryAction) {
     const auth = c.get("auth") as UserAuthContext;
     const requestId = c.get("requestId");
     const claimId = c.req.param("id");
+    if (!UUID_RE.test(claimId)) throw new ApiError(404, "NOT_FOUND", "Claim not found", requestId);
     const claim = await ctx.stores.claims.getClaim(auth.passportId, claimId);
     if (!claim) throw new ApiError(404, "NOT_FOUND", "Claim not found", requestId);
     const body = await c.req.json().catch(() => ({}));
