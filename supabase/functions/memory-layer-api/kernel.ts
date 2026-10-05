@@ -119,22 +119,27 @@ export async function ingest(observation: Omit<Observation, "id" | "outcome">, c
   const obsId = ids.observationId(); const evidenceId = ids.evidenceId();
   const evidence: Evidence = { id: evidenceId, claim_id: matchingClaim?.id ?? "", observation_id: obsId, source_type: evidenceTier, app_id: ctx.appId, experience_id: observation.experience_id, observed_at: ctx.now, raw_observation: observation.raw_context, extraction_method: observation.extraction_method, first_party: true, lineage: { origin_app_id: ctx.appId, origin_experience_id: observation.experience_id ?? "", chain: [ctx.appId] }, status: "active", retracted_at: null, retraction_reason: null, provenance_status: "active" };
   if (matchingClaim) {
-    evidence.claim_id = matchingClaim.id; await stores.evidence.createEvidence(ctx.passportId, evidence);
+    evidence.claim_id = matchingClaim.id;
+    const obs: Observation = { ...observation, id: obsId, outcome: { status: "merged", existing_claim_id: matchingClaim.id, evidence_id: evidenceId } };
+    await stores.observations.createObservation(ctx.passportId, obs);
+    await stores.evidence.createEvidence(ctx.passportId, evidence);
     const allEvidence = await stores.evidence.getEvidenceForClaim(ctx.passportId, matchingClaim.id, "active");
     const result = reconcile({ claim: matchingClaim, activeEvidence: allEvidence });
     const updatedClaim: Claim = { ...matchingClaim, state: result.newState, observed_state: result.observedState, value: observation.value, updated_at: ctx.now, evidence_ids: [...matchingClaim.evidence_ids, evidenceId] };
     await stores.claims.updateClaim(ctx.passportId, updatedClaim);
-    const obs: Observation = { ...observation, id: obsId, outcome: { status: "merged", existing_claim_id: matchingClaim.id, evidence_id: evidenceId } };
-    await stores.observations.createObservation(ctx.passportId, obs);
     return { status: "merged", observation: obs, evidence, claim: updatedClaim };
   }
   const claimId = ids.claimId(); const versionId = ids.claimVersionId(); evidence.claim_id = claimId;
-  const newClaim: Claim = { id: claimId, passport_id: ctx.passportId, subject: observation.subject, predicate: observation.predicate, value: observation.value, qualifiers: observation.qualifiers, category: observation.declared_category, tags: [], state: "OBSERVED", declared_state: null, observed_state: "OBSERVED", volatility: "stable", created_at: ctx.now, updated_at: ctx.now, last_confirmed_at: null, expires_at: null, sensitivity: finalSensitivity, sharing_policy: { type: "grant_controlled" as const }, evidence_ids: [evidenceId], purged_references: [], contradicted_by: [], current_version_id: versionId, deleted: false, deleted_at: null };
-  const version: ClaimVersion = { id: versionId, claim_id: claimId, version_number: 1, previous_version_id: null, value: observation.value, qualifiers: observation.qualifiers, state: "OBSERVED", changed_by: ctx.appId, changed_at: ctx.now, change_reason: "initial observation", evidence_ids: [evidenceId] };
-  await stores.evidence.createEvidence(ctx.passportId, evidence); await stores.claims.createClaim(ctx.passportId, newClaim); await stores.claims.createClaimVersion(ctx.passportId, version);
   const obs: Observation = { ...observation, id: obsId, outcome: { status: "accepted", evidence_id: evidenceId, claim_id: claimId } };
   await stores.observations.createObservation(ctx.passportId, obs);
-  return { status: "accepted", observation: obs, evidence, claim: newClaim, version };
+  const newClaim: Claim = { id: claimId, passport_id: ctx.passportId, subject: observation.subject, predicate: observation.predicate, value: observation.value, qualifiers: observation.qualifiers, category: observation.declared_category, tags: [], state: "OBSERVED", declared_state: null, observed_state: "OBSERVED", volatility: "stable", created_at: ctx.now, updated_at: ctx.now, last_confirmed_at: null, expires_at: null, sensitivity: finalSensitivity, sharing_policy: { type: "grant_controlled" as const }, evidence_ids: [evidenceId], purged_references: [], contradicted_by: [], current_version_id: null as unknown as string, deleted: false, deleted_at: null };
+  await stores.claims.createClaim(ctx.passportId, newClaim);
+  const version: ClaimVersion = { id: versionId, claim_id: claimId, version_number: 1, previous_version_id: null, value: observation.value, qualifiers: observation.qualifiers, state: "OBSERVED", changed_by: ctx.appId, changed_at: ctx.now, change_reason: "initial observation", evidence_ids: [evidenceId] };
+  await stores.claims.createClaimVersion(ctx.passportId, version);
+  await stores.evidence.createEvidence(ctx.passportId, evidence);
+  const claimWithVersion: Claim = { ...newClaim, current_version_id: versionId };
+  await stores.claims.updateClaim(ctx.passportId, claimWithVersion);
+  return { status: "accepted", observation: obs, evidence, claim: claimWithVersion, version };
 }
 
 export interface ContextItem { claim_id: string; category: ClaimCategory; sensitivity: Sensitivity; summary: string; confidence_band: "high" | "medium" | "low"; }
