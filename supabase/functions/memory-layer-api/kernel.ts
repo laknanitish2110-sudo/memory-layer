@@ -73,11 +73,7 @@ export function reconcile(input: { claim: Claim; activeEvidence: Evidence[] }): 
   if (activeEvidence.length === 0) return { newState: claim.declared_state ?? "UNSUPPORTED", observedState: "UNSUPPORTED", reason: "no active evidence" };
   let bestTier: EvidenceTier = 5;
   for (const e of activeEvidence) { if (e.source_type < bestTier) bestTier = e.source_type; }
-  const tuples = new Map<string, Set<string>>();
-  for (const e of activeEvidence) { if (e.status !== "active") continue; const key = e.claim_id; if (!tuples.has(key)) tuples.set(key, new Set()); tuples.get(key)!.add(e.raw_observation); }
-  let hasContradiction = false;
-  for (const values of tuples.values()) { if (values.size > 1) { hasContradiction = true; break; } }
-  if (hasContradiction) return { newState: claim.declared_state ?? "CONTESTED", observedState: "CONTESTED", reason: "conflicting evidence, no resolution" };
+  if (claim.contradicted_by && claim.contradicted_by.length > 0) return { newState: claim.declared_state ?? "CONTESTED", observedState: "CONTESTED", reason: "conflicting evidence, no resolution" };
   if (bestTier <= 2) return { newState: "DECLARED", observedState: "DECLARED", reason: `user evidence (tier ${bestTier})` };
   const origins = new Set<string>();
   for (const e of activeEvidence) { if (e.status === "active") origins.add(e.lineage.origin_app_id); }

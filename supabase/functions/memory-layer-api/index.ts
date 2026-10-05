@@ -475,6 +475,7 @@ app.post("/v1/tokens/refresh", async (c) => {
   if (!body.refresh_token || typeof body.refresh_token !== "string") throw new ApiError(400, "VALIDATION_ERROR", "refresh_token is required and must be a string", requestId);
   const decoded = refreshTokenDecoder.decode(body.refresh_token);
   if (!decoded) throw new ApiError(401, "TOKEN_INVALID", "Invalid refresh token", requestId);
+  if (!UUID_RE.test(decoded.family_id)) throw new ApiError(401, "TOKEN_INVALID", "Invalid refresh token", requestId);
   const now = new Date().toISOString();
   const result = await refreshTokenFamily(ctx.stores.tokenFamilies, ctx.tokenIssuer, decoded.family_id, decoded.generation, now);
   if (result.status === "reuse_detected") throw new ApiError(401, "TOKEN_REUSE_DETECTED", "Token reuse detected. Token family revoked.", requestId);
