@@ -73,6 +73,7 @@ if (!SUPABASE_SERVICE_KEY) {
 
 type Result = { name: string; pass: boolean; detail: string };
 const results: Result[] = [];
+const RUN_ID = randomUUID().slice(0, 8);
 
 function record(name: string, pass: boolean, detail: string) {
   results.push({ name, pass, detail });
@@ -185,9 +186,9 @@ const aliceObs = await api("/v1/observations", {
   headers: bearer(ALICE_KEY),
   body: {
     idempotency_key: aliceIdempKey,
-    subject: "Alice",
+    subject: `Alice_${RUN_ID}`,
     predicate: "knows",
-    value: "TypeScript",
+    value: `TypeScript_${RUN_ID}`,
     declared_category: "skills",
     declared_sensitivity: "personal",
     extraction_method: "user_stated",
@@ -533,10 +534,20 @@ if (!aliceBinding) {
   const tempBindingId = randomUUID();
   const tempGrantId = randomUUID();
   const tempFamilyId = randomUUID();
+  const tempAppPrincipalId = randomUUID();
   const tempNow = new Date().toISOString();
 
-  const tempAppPrincipalId = randomUUID();
-  const bindingInsert = await serviceClient.from("bindings").insert({
+  // Need a valid app_principal due to FK + unique(passport_id, app_principal_id) constraints
+  await serviceClient.from("app_principals").insert({
+    id: tempAppPrincipalId,
+    developer_id: "827b3b2b-6c01-4d7b-baa0-02c1c3f46791",
+    name: `preflight-revocation-test-${RUN_ID}`,
+    description: "Temporary app for revocation test",
+    declared_purposes: ["coding_assistance"],
+    status: "active",
+    registered_at: tempNow,
+  });
+  await serviceClient.from("bindings").insert({
     id: tempBindingId,
     passport_id: aliceBinding.passport_id,
     app_principal_id: tempAppPrincipalId,
@@ -545,7 +556,7 @@ if (!aliceBinding) {
     revision: 1,
     created_at: tempNow,
   });
-  if (bindingInsert.error) console.error("  [4.x] binding insert failed:", bindingInsert.error.message);
+
   await serviceClient.from("binding_grants").insert({
     id: tempGrantId,
     binding_id: tempBindingId,
@@ -654,6 +665,7 @@ if (!aliceBinding) {
   await serviceClient.from("token_families").delete().eq("family_id", tempFamilyId);
   await serviceClient.from("binding_grants").delete().eq("id", tempGrantId);
   await serviceClient.from("bindings").delete().eq("id", tempBindingId);
+  await serviceClient.from("app_principals").delete().eq("id", tempAppPrincipalId);
 }
 
 console.log(`
@@ -774,9 +786,9 @@ const bobObs = await api("/v1/observations", {
   headers: bearer(BOB_KEY),
   body: {
     idempotency_key: bobIdempKey,
-    subject: "Bob",
+    subject: `Bob_${RUN_ID}`,
     predicate: "knows",
-    value: "Python",
+    value: `Python_${RUN_ID}`,
     declared_category: "skills",
     declared_sensitivity: "personal",
     extraction_method: "user_stated",
