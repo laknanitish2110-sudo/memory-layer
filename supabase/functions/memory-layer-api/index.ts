@@ -125,7 +125,7 @@ app.onError((err, c) => {
   if (err instanceof ApiError) return c.json(err.toJSON(), err.status as any);
   const errDetail = err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : err;
   console.error(JSON.stringify({ unhandled_error: errDetail, request_id: requestId, path: c.req.path, method: c.req.method }));
-  return c.json({ error: { code: "INTERNAL_ERROR", message: err instanceof Error ? err.message : "An internal error occurred", request_id: requestId } }, 500);
+  return c.json({ error: { code: "INTERNAL_ERROR", message: "An internal error occurred", request_id: requestId } }, 500);
 });
 
 app.use("*", async (c, next) => {
@@ -306,8 +306,14 @@ app.post("/v1/observations", aAuth, async (c) => {
   for (const field of SERVER_DETERMINED_FIELDS) {
     if (field in body) throw new ApiError(400, "VALIDATION_ERROR", `Field '${field}' is server-determined and must not be provided`, requestId);
   }
+  const STRING_FIELDS = ["idempotency_key", "subject", "predicate", "value", "declared_category", "declared_sensitivity", "extraction_method", "raw_context"] as const;
+  for (const f of STRING_FIELDS) { if (body[f] !== undefined && typeof body[f] !== "string") throw new ApiError(400, "VALIDATION_ERROR", `Field '${f}' must be a string`, requestId); }
   if (!body.idempotency_key || !body.subject || !body.predicate || !body.value) throw new ApiError(400, "VALIDATION_ERROR", "Missing required fields: idempotency_key, subject, predicate, value", requestId);
   if (!body.declared_category || !body.declared_sensitivity) throw new ApiError(400, "VALIDATION_ERROR", "Missing required fields: declared_category, declared_sensitivity", requestId);
+  const VALID_CATEGORIES: ClaimCategory[] = ["skills", "preferences", "goals", "projects", "behavioral_patterns", "emotional_patterns", "personal_context"];
+  if (!VALID_CATEGORIES.includes(body.declared_category)) throw new ApiError(400, "VALIDATION_ERROR", `Invalid declared_category '${body.declared_category}'. Must be one of: ${VALID_CATEGORIES.join(", ")}`, requestId);
+  const VALID_SENSITIVITIES: Sensitivity[] = ["public", "personal", "sensitive", "restricted"];
+  if (!VALID_SENSITIVITIES.includes(body.declared_sensitivity)) throw new ApiError(400, "VALIDATION_ERROR", `Invalid declared_sensitivity '${body.declared_sensitivity}'. Must be one of: ${VALID_SENSITIVITIES.join(", ")}`, requestId);
   if (!body.extraction_method || !body.raw_context) throw new ApiError(400, "VALIDATION_ERROR", "Missing required fields: extraction_method, raw_context", requestId);
   const VALID_EXTRACTION_METHODS = ["user_stated", "app_measured", "model_inferred"];
   if (!VALID_EXTRACTION_METHODS.includes(body.extraction_method)) throw new ApiError(400, "VALIDATION_ERROR", `Invalid extraction_method '${body.extraction_method}'. Must be one of: ${VALID_EXTRACTION_METHODS.join(", ")}`, requestId);
@@ -466,7 +472,7 @@ app.post("/v1/claims/:id/delete", uAuth, userClaimHandler("DELETE"));
 app.post("/v1/tokens/refresh", async (c) => {
   const requestId = c.get("requestId");
   const body = await c.req.json().catch(() => { throw new ApiError(400, "VALIDATION_ERROR", "Invalid JSON body", requestId); });
-  if (!body.refresh_token) throw new ApiError(400, "VALIDATION_ERROR", "refresh_token is required", requestId);
+  if (!body.refresh_token || typeof body.refresh_token !== "string") throw new ApiError(400, "VALIDATION_ERROR", "refresh_token is required and must be a string", requestId);
   const decoded = refreshTokenDecoder.decode(body.refresh_token);
   if (!decoded) throw new ApiError(401, "TOKEN_INVALID", "Invalid refresh token", requestId);
   const now = new Date().toISOString();
