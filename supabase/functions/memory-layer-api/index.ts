@@ -109,7 +109,7 @@ const appContext: AppContext = {
 // HONO APP + ROUTES
 // ═══════════════════════════════════════════════════════════════════
 
-const app = new Hono();
+const app = new Hono().basePath("/memory-layer-api");
 
 let reqCounter = 0;
 app.use("*", async (c, next) => {
