@@ -123,8 +123,9 @@ app.use("*", async (c, next) => {
 app.onError((err, c) => {
   const requestId = c.get("requestId") ?? "req_unknown";
   if (err instanceof ApiError) return c.json(err.toJSON(), err.status as any);
-  console.error("Unhandled error:", err);
-  return c.json({ error: { code: "INTERNAL_ERROR", message: "An internal error occurred", request_id: requestId } }, 500);
+  const errDetail = err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : err;
+  console.error(JSON.stringify({ unhandled_error: errDetail, request_id: requestId, path: c.req.path, method: c.req.method }));
+  return c.json({ error: { code: "INTERNAL_ERROR", message: err instanceof Error ? err.message : "An internal error occurred", request_id: requestId } }, 500);
 });
 
 app.use("*", async (c, next) => {
@@ -308,6 +309,8 @@ app.post("/v1/observations", aAuth, async (c) => {
   if (!body.idempotency_key || !body.subject || !body.predicate || !body.value) throw new ApiError(400, "VALIDATION_ERROR", "Missing required fields: idempotency_key, subject, predicate, value", requestId);
   if (!body.declared_category || !body.declared_sensitivity) throw new ApiError(400, "VALIDATION_ERROR", "Missing required fields: declared_category, declared_sensitivity", requestId);
   if (!body.extraction_method || !body.raw_context) throw new ApiError(400, "VALIDATION_ERROR", "Missing required fields: extraction_method, raw_context", requestId);
+  const VALID_EXTRACTION_METHODS = ["user_stated", "app_measured", "model_inferred"];
+  if (!VALID_EXTRACTION_METHODS.includes(body.extraction_method)) throw new ApiError(400, "VALIDATION_ERROR", `Invalid extraction_method '${body.extraction_method}'. Must be one of: ${VALID_EXTRACTION_METHODS.join(", ")}`, requestId);
 
   const authRequest: AuthorizationRequest = {
     credential_id: `cred_${auth.bindingId}`, binding_id: auth.bindingId, binding_revision: auth.bindingRevision,
@@ -329,8 +332,15 @@ app.post("/v1/observations", aAuth, async (c) => {
     extraction_method: body.extraction_method, raw_context: body.raw_context, submitted_at: now,
   };
 
-  const result = await ingest(observation, { passportId: auth.passportId, binding: auth.binding, grant: auth.grant, appId: auth.binding.app_principal_id, now },
-    { observations: ctx.stores.observations, claims: ctx.stores.claims, evidence: ctx.stores.evidence }, ids, body.declared_sensitivity as Sensitivity);
+  let result;
+  try {
+    result = await ingest(observation, { passportId: auth.passportId, binding: auth.binding, grant: auth.grant, appId: auth.binding.app_principal_id, now },
+      { observations: ctx.stores.observations, claims: ctx.stores.claims, evidence: ctx.stores.evidence }, ids, body.declared_sensitivity as Sensitivity);
+  } catch (ingestErr: unknown) {
+    const detail = ingestErr instanceof Error ? { message: ingestErr.message, name: ingestErr.name, stack: ingestErr.stack } : ingestErr;
+    console.error(JSON.stringify({ ingest_error: detail, request_id: requestId }));
+    throw ingestErr;
+  }
 
   if (result.status === "rejected") throw mapIngestionReasonToApiError(result.reason, requestId);
   if (result.status === "quarantined") return c.json({ data: { observation_id: null, outcome: { status: "quarantined", reason: result.reason, requires_user_action: true } }, meta: { request_id: requestId, policy_version: "v0.1.0" } }, 201);

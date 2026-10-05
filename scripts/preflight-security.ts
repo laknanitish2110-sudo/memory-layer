@@ -190,7 +190,7 @@ const aliceObs = await api("/v1/observations", {
     value: "TypeScript",
     declared_category: "skills",
     declared_sensitivity: "personal",
-    extraction_method: "explicit_statement",
+    extraction_method: "user_stated",
     raw_context: "Preflight security test — Alice's observation",
     purpose: "coding_assistance",
     qualifiers: {},
@@ -295,7 +295,7 @@ const badCatObs = await api("/v1/observations", {
     value: "classified-info",
     declared_category: "emotional_patterns",
     declared_sensitivity: "restricted",
-    extraction_method: "explicit_statement",
+    extraction_method: "user_stated",
     raw_context: "Attempting to write restricted data in unauthorized category",
     purpose: "coding_assistance",
     qualifiers: {},
@@ -318,7 +318,7 @@ const highSensObs = await api("/v1/observations", {
     value: "123-45-6789",
     declared_category: "skills",
     declared_sensitivity: "restricted",
-    extraction_method: "explicit_statement",
+    extraction_method: "user_stated",
     raw_context: "Attempting to write restricted-sensitivity data",
     purpose: "coding_assistance",
     qualifiers: {},
@@ -344,7 +344,7 @@ const injectedObs = await api("/v1/observations", {
     value: "injection test",
     declared_category: "skills",
     declared_sensitivity: "personal",
-    extraction_method: "explicit_statement",
+    extraction_method: "user_stated",
     raw_context: "Attempting to inject server-determined fields",
     purpose: "coding_assistance",
     qualifiers: {},
@@ -535,15 +535,17 @@ if (!aliceBinding) {
   const tempFamilyId = randomUUID();
   const tempNow = new Date().toISOString();
 
-  await serviceClient.from("bindings").insert({
+  const tempAppPrincipalId = randomUUID();
+  const bindingInsert = await serviceClient.from("bindings").insert({
     id: tempBindingId,
     passport_id: aliceBinding.passport_id,
-    app_principal_id: aliceBinding.app_principal_id,
+    app_principal_id: tempAppPrincipalId,
     status: "active",
     current_grant_id: null,
     revision: 1,
     created_at: tempNow,
   });
+  if (bindingInsert.error) console.error("  [4.x] binding insert failed:", bindingInsert.error.message);
   await serviceClient.from("binding_grants").insert({
     id: tempGrantId,
     binding_id: tempBindingId,
@@ -615,7 +617,7 @@ if (!aliceBinding) {
       value: "this should fail",
       declared_category: "skills",
       declared_sensitivity: "personal",
-      extraction_method: "explicit_statement",
+      extraction_method: "user_stated",
       raw_context: "Revoked credential attempting observation",
       purpose: "coding_assistance",
       qualifiers: {},
@@ -777,7 +779,7 @@ const bobObs = await api("/v1/observations", {
     value: "Python",
     declared_category: "skills",
     declared_sensitivity: "personal",
-    extraction_method: "explicit_statement",
+    extraction_method: "user_stated",
     raw_context: "Preflight security test — Bob's observation",
     purpose: "coding_assistance",
     qualifiers: {},
