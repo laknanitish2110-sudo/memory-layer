@@ -113,7 +113,6 @@ All POST endpoints require `Content-Type: application/json`.
 | Endpoint | Method | Description |
 |---|---|---|
 | `/v1/tokens/refresh` | POST | Exchange refresh token for access + new refresh |
-| `/` | GET | Service info |
 | `/health` | GET | Health check |
 
 ### App Authentication (Bearer access token)
