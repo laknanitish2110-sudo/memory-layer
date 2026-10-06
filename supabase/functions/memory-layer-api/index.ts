@@ -482,6 +482,16 @@ app.post("/v1/tokens/refresh", async (c) => {
   return c.json({ data: { access_token: result.access_token.token_hash, access_token_expires_at: result.access_token.expires_at, refresh_token: result.refresh_token.token_hash, token_type: "Bearer" }, meta: { request_id: requestId, policy_version: "v0.1.0" } });
 });
 
+// --- Not found (JSON 404 + root path fallback) ---
+app.notFound((c) => {
+  const p = new URL(c.req.url).pathname;
+  if (p === "/memory-layer-api" || p === "/memory-layer-api/") {
+    return c.json({ service: "memory-layer-api", version: "0.1.0", status: "ok" });
+  }
+  const rid = c.get("requestId") ?? `req_${crypto.randomUUID().slice(0, 8)}`;
+  return c.json({ error: { code: "NOT_FOUND", message: "Not found", request_id: rid } }, 404);
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // SERVE
 // ═══════════════════════════════════════════════════════════════════
