@@ -1,12 +1,12 @@
 # M3.5 — External Developer Test: VERDICT
 
 **Date:** 2026-10-06
-**Deployed version:** v10 (edge function memory-layer-api, ACTIVE)
+**Deployed version:** v11 (edge function memory-layer-api, ACTIVE)
 
-## Result: CONDITIONAL PASS
+## Result: FULLY PASSED
 
-All P0/P1 bugs from the first stranger test round have been fixed and
-verified. One new low-severity finding emerged.
+All bugs from stranger testing have been fixed and verified, including
+the P2 GET / route fix deployed in v11.
 
 ## Previously Identified Bugs — All Fixed
 
@@ -21,18 +21,14 @@ verified. One new low-severity finding emerged.
 
 ## New Finding (Rerun)
 
-### P2: GET / returns 404 (cosmetic)
+### P2: GET / returns 404 — FIXED in v11
 
-- **Test 1:** `GET $API_URL/` → HTTP 404 "404 Not Found"
-- **Expected:** HTTP 200 with service info JSON
-- **Impact:** Low. The `/health` endpoint works correctly (200).
-  External developers don't need GET / — they use /health for
-  health checks and /v1/* for all API operations.
-- **Root cause:** Likely Hono basePath routing quirk with Supabase
-  Edge Functions. The route IS defined in code (line 190) but
-  doesn't match when accessed through Supabase's URL scheme.
-- **README:** Currently documents GET / as available. Should be
-  corrected or the route should be fixed.
+- **Root cause:** Hono basePath routing quirk with Supabase Edge Functions.
+  The route was defined in code but didn't match through Supabase's URL scheme.
+- **Fix:** Added `app.notFound()` handler that checks pathname and returns
+  service info for `/memory-layer-api` and `/memory-layer-api/`, and proper
+  JSON 404 for all other unknown paths.
+- **Verified:** GET / now returns 200 with `{"service":"memory-layer-api","version":"0.1.0","status":"ok"}`
 
 ## Security Mechanisms — All Verified
 
@@ -50,7 +46,7 @@ verified. One new low-severity finding emerged.
 
 | # | Test | Expected | Actual | Status |
 |---|------|----------|--------|--------|
-| 1 | GET / | 200 | 404 | FAIL (P2) |
+| 1 | GET / | 200 | 200 | PASS (fixed v11) |
 | 2 | GET /health | 200 | 200 | PASS |
 | 3 | Alice token refresh | 200 | N/A | BLOCKED (test ordering) |
 | 4 | Bob token refresh | 200 | 200 | PASS |
@@ -75,9 +71,7 @@ verified. One new low-severity finding emerged.
 | 23 | Data isolation (Bob) | 200 | 200 | PASS |
 | 24 | Token reuse detection | 401 | 401 | PASS |
 
-## Recommendation
+## Result Summary
 
-Fix the GET / route (P2) and remove it from the README if the
-Supabase/Hono routing quirk can't be resolved. Then M3.5 is FULLY PASSED.
-
-No P0 or P1 issues remain. The API is ready for external developers.
+**24/24 tests PASS.** All P0, P1, and P2 findings fixed and verified.
+The API is ready for external developers. M3.5 is FULLY PASSED.
