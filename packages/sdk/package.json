@@ -12,11 +12,32 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "memory",
+    "context",
+    "llm",
+    "personalization",
+    "user-memory",
+    "ai-memory",
+    "persistent-context"
+  ],
+  "author": "Memory Layer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/laknanitish2110-sudo/memory-layer"
+  },
+  "homepage": "https://github.com/laknanitish2110-sudo/memory-layer#readme",
+  "engines": {
+    "node": ">=18"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

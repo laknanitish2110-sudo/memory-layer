@@ -20,7 +20,8 @@ export async function request<T>(
   body?: unknown,
   query?: Record<string, string>
 ): Promise<ApiResponse<T>> {
-  const url = new URL(path, config.baseUrl);
+  const base = config.baseUrl.replace(/\/+$/, "");
+  const url = new URL(`${base}${path}`);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined) url.searchParams.set(k, v);

@@ -57,7 +57,7 @@ export class MemoryLayer implements MemoryClient {
       );
     }
 
-    const baseUrl = config.baseUrl ?? "https://api.memorylayer.dev/v1";
+    const baseUrl = config.baseUrl ?? "https://fqizvwkurlwwzchftqnx.supabase.co/functions/v1/memory-layer-api";
     const token = config.apiKey ?? config.sessionToken!;
 
     this.http = {
