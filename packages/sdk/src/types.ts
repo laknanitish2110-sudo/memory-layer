@@ -28,6 +28,9 @@ export interface MemoryLayerConfig {
 
   /** Custom fetch implementation (for testing or edge runtimes). */
   fetch?: typeof globalThis.fetch;
+
+  /** Set to true to suppress the hard error when using an API key in a browser. */
+  dangerouslyAllowApiKeyInBrowser?: boolean;
 }
 
 // ─── Layer 1: Simple API ─────────────────────────────────────

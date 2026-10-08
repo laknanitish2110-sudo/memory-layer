@@ -128,11 +128,12 @@ const API_CODE_MAP: Record<string, (msg: string, reqId?: string) => MemoryError>
 };
 
 export function fromApiError(apiCode: string, message: string, requestId?: string): MemoryError {
-  const factory = API_CODE_MAP[apiCode];
-  if (factory) return factory(message, requestId);
+  const safeMessage = message.slice(0, 500);
+  const factory = Object.prototype.hasOwnProperty.call(API_CODE_MAP, apiCode) ? API_CODE_MAP[apiCode] : undefined;
+  if (factory) return factory(safeMessage, requestId);
   return new MemoryError({
     code: "SERVER_ERROR",
-    message: message || "An unexpected error occurred.",
+    message: safeMessage || "An unexpected error occurred.",
     apiCode,
     requestId,
   });

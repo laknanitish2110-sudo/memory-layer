@@ -1,5 +1,25 @@
 node_modules/
 dist/
+
+# Environment files
+.env*
+!.env.example
+
+# IDE
+.idea/
+.vscode/settings.json
+.vscode/launch.json
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Coverage and output
+coverage/
+*.log
+npm-debug.log*
+
+# Build artifacts
 *.tsbuildinfo
-.env
-.env.local

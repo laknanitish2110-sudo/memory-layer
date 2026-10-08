@@ -15,12 +15,25 @@ import type {
   ClaimSummary,
   Category,
 } from "./types.js";
-import { MemoryValidationError } from "./errors.js";
+import { MemoryValidationError, MemoryAuthError, MemoryPermissionError } from "./errors.js";
 import { request, type HttpConfig } from "./http.js";
 
-let idCounter = 0;
 function generateIdempotencyKey(): string {
-  return `sdk_${Date.now()}_${++idCounter}`;
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function validateId(id: string, name: string): void {
+  if (!id || typeof id !== "string" || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+    throw new MemoryValidationError({
+      message: `Invalid ${name}: must be a non-empty alphanumeric string.`,
+      suggestion: `Check that the ${name} is a valid identifier.`,
+    });
+  }
 }
 
 /**
@@ -50,14 +63,20 @@ export class MemoryLayer implements MemoryClient {
         suggestion: "Server-side: use apiKey. Browser-side: use sessionToken.",
       });
     }
-    if (config.apiKey && typeof globalThis.window !== "undefined") {
-      console.warn(
-        "[MemoryLayer] WARNING: Using an API key in a browser environment exposes it to users. " +
-        "Use sessionToken for browser-side integrations."
-      );
+    if (config.apiKey && typeof globalThis.window !== "undefined" && !config.dangerouslyAllowApiKeyInBrowser) {
+      throw new MemoryValidationError({
+        message: "Using an API key in a browser environment exposes it to users.",
+        suggestion: "Use sessionToken for browser-side integrations, or set dangerouslyAllowApiKeyInBrowser: true if you understand the risk.",
+      });
     }
 
     const baseUrl = config.baseUrl ?? "https://fqizvwkurlwwzchftqnx.supabase.co/functions/v1/memory-layer-api";
+    if (!/^https:\/\//.test(baseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(baseUrl)) {
+      throw new MemoryValidationError({
+        message: "baseUrl must use HTTPS (or http://localhost for development).",
+        suggestion: "Set baseUrl to an https:// URL.",
+      });
+    }
     const token = config.apiKey ?? config.sessionToken!;
 
     this.http = {
@@ -107,6 +126,24 @@ export class MemoryLayer implements MemoryClient {
       throw new MemoryValidationError({
         message: "predicate and value are required.",
         suggestion: 'memory.observe({ predicate: "learning", value: "Rust" })',
+      });
+    }
+    if (input.predicate.length > 1024) {
+      throw new MemoryValidationError({
+        message: "predicate must be 1024 characters or fewer.",
+        suggestion: "Use a shorter predicate identifier.",
+      });
+    }
+    if (input.value.length > 4096) {
+      throw new MemoryValidationError({
+        message: "value must be 4096 characters or fewer.",
+        suggestion: "Use a shorter value.",
+      });
+    }
+    if (input.context && input.context.length > 10240) {
+      throw new MemoryValidationError({
+        message: "context must be 10KB or fewer.",
+        suggestion: "Summarize the context before passing it.",
       });
     }
 
@@ -162,14 +199,17 @@ export class MemoryLayer implements MemoryClient {
           writeCategories: [],
           sensitivityCeiling: "personal",
         };
-      } catch {
-        return {
-          connected: false,
-          capabilities: [],
-          readCategories: [],
-          writeCategories: [],
-          sensitivityCeiling: "public",
-        };
+      } catch (err) {
+        if (err instanceof MemoryAuthError || err instanceof MemoryPermissionError) {
+          return {
+            connected: false,
+            capabilities: [],
+            readCategories: [],
+            writeCategories: [],
+            sensitivityCeiling: "public",
+          };
+        }
+        throw err;
       }
     },
 
@@ -211,7 +251,7 @@ export class MemoryLayer implements MemoryClient {
         this.http, "GET", "/v1/bindings"
       );
       await request(
-        this.http, "POST", `/v1/bindings/${bindingRes.data.id}/revoke`, {}
+        this.http, "POST", `/v1/bindings/${encodeURIComponent(bindingRes.data.id)}/revoke`, {}
       );
     },
   };
@@ -221,8 +261,9 @@ export class MemoryLayer implements MemoryClient {
   readonly advanced = {
     passports: {
       get: async (id: string): Promise<Passport> => {
+        validateId(id, "passport ID");
         const res = await request<{ id: string; created_at: string }>(
-          this.http, "GET", `/v1/passports/${id}`
+          this.http, "GET", `/v1/passports/${encodeURIComponent(id)}`
         );
         return { id: res.data.id, createdAt: res.data.created_at };
       },
@@ -239,9 +280,10 @@ export class MemoryLayer implements MemoryClient {
 
     bindings: {
       get: async (id: string): Promise<Binding> => {
+        validateId(id, "binding ID");
         const res = await request<{
           id: string; passport_id?: string; status: string; created_at: string;
-        }>(this.http, "GET", "/v1/bindings");
+        }>(this.http, "GET", `/v1/bindings/${encodeURIComponent(id)}`);
         return {
           id: res.data.id,
           passportId: res.data.passport_id ?? "",
@@ -264,9 +306,10 @@ export class MemoryLayer implements MemoryClient {
 
     grants: {
       get: async (id: string): Promise<Grant> => {
+        validateId(id, "grant ID");
         const res = await request<{
           grant: { id: string; binding_id?: string; capabilities: string[]; active: boolean; consented_at?: string };
-        }>(this.http, "GET", `/v1/grants/${id}`);
+        }>(this.http, "GET", `/v1/grants/${encodeURIComponent(id)}`);
         const g = res.data.grant;
         return {
           id: g.id,
@@ -277,19 +320,21 @@ export class MemoryLayer implements MemoryClient {
         };
       },
       consent: async (grantId: string, approved: boolean): Promise<void> => {
+        validateId(grantId, "grant ID");
         await request(
-          this.http, "POST", `/v1/grants/${grantId}/consent`, { approved }
+          this.http, "POST", `/v1/grants/${encodeURIComponent(grantId)}/consent`, { approved }
         );
       },
     },
 
     claims: {
       get: async (id: string): Promise<ClaimSummary> => {
+        validateId(id, "claim ID");
         const res = await request<{
           id: string; category: string; subject: string; predicate: string;
           value: string; state: string; sensitivity: string;
           confidence_band?: string; created_at: string; updated_at: string;
-        }>(this.http, "GET", `/v1/claims/${id}`);
+        }>(this.http, "GET", `/v1/claims/${encodeURIComponent(id)}`);
         const c = res.data;
         return {
           id: c.id,
@@ -322,16 +367,20 @@ export class MemoryLayer implements MemoryClient {
         }));
       },
       confirm: async (id: string): Promise<void> => {
-        await request(this.http, "POST", `/v1/claims/${id}/confirm`, {});
+        validateId(id, "claim ID");
+        await request(this.http, "POST", `/v1/claims/${encodeURIComponent(id)}/confirm`, {});
       },
       correct: async (id: string, newValue: string): Promise<void> => {
-        await request(this.http, "POST", `/v1/claims/${id}/correct`, { new_value: newValue });
+        validateId(id, "claim ID");
+        await request(this.http, "POST", `/v1/claims/${encodeURIComponent(id)}/correct`, { new_value: newValue });
       },
       dispute: async (id: string): Promise<void> => {
-        await request(this.http, "POST", `/v1/claims/${id}/dispute`, {});
+        validateId(id, "claim ID");
+        await request(this.http, "POST", `/v1/claims/${encodeURIComponent(id)}/dispute`, {});
       },
       delete: async (id: string): Promise<void> => {
-        await request(this.http, "POST", `/v1/claims/${id}/delete`, {});
+        validateId(id, "claim ID");
+        await request(this.http, "POST", `/v1/claims/${encodeURIComponent(id)}/delete`, {});
       },
     },
   };

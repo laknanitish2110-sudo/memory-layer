@@ -13,5 +13,10 @@ RUN cd deploy && npm install && \
 EXPOSE 3000
 ENV PORT=3000
 
+# Run as non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+RUN chown -R appuser:appuser /app
+USER appuser
+
 WORKDIR /app/deploy
 CMD ["npx", "tsx", "server.ts"]

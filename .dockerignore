@@ -5,3 +5,27 @@ dist
 **/dist
 *.md
 !deploy/README.md
+
+# Environment files
+.env
+.env.*
+.env.local
+.env.production
+
+# Source and docs
+scripts/
+docs/
+supabase/
+tests/
+**/tests/
+**/*.test.ts
+**/*.spec.ts
+*.sql
+.github/
+
+# Development
+benchmarks/
+examples/
+coverage/
+.vscode/
+.idea/

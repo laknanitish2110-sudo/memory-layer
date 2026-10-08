@@ -163,7 +163,7 @@ export interface RefreshToken { token_hash: string; family_id: string; generatio
 export interface AccessToken { token_hash: string; family_id: string; binding_id: string; issued_at: ISO8601; expires_at: ISO8601; }
 export type TokenRefreshResult = { status: "rotated"; access_token: AccessToken; refresh_token: RefreshToken; new_generation: number; } | { status: "reuse_detected"; family_id: string; presented_generation: number; current_generation: number; };
 export interface TokenFamilyStore { getFamily(familyId: string): Promise<TokenFamily | null>; compareAndSwapGeneration(familyId: string, expectedGeneration: number, newGeneration: number): Promise<boolean>; revokeFamily(familyId: string, revokedAt: string): Promise<void>; }
-export interface TokenIssuer { issueAccessToken(familyId: string, bindingId: string): AccessToken; issueRefreshToken(familyId: string, generation: number): RefreshToken; }
+export interface TokenIssuer { issueAccessToken(familyId: string, bindingId: string): AccessToken | Promise<AccessToken>; issueRefreshToken(familyId: string, generation: number): RefreshToken | Promise<RefreshToken>; }
 
 export async function refreshTokenFamily(store: TokenFamilyStore, issuer: TokenIssuer, familyId: string, presentedGeneration: number, now: string): Promise<TokenRefreshResult> {
   const family = await store.getFamily(familyId);
@@ -173,7 +173,7 @@ export async function refreshTokenFamily(store: TokenFamilyStore, issuer: TokenI
   const newGeneration = presentedGeneration + 1;
   const swapped = await store.compareAndSwapGeneration(familyId, presentedGeneration, newGeneration);
   if (!swapped) { await store.revokeFamily(familyId, now); return { status: "reuse_detected", family_id: familyId, presented_generation: presentedGeneration, current_generation: presentedGeneration }; }
-  return { status: "rotated", access_token: issuer.issueAccessToken(familyId, family.binding_id), refresh_token: issuer.issueRefreshToken(familyId, newGeneration), new_generation: newGeneration };
+  return { status: "rotated", access_token: await issuer.issueAccessToken(familyId, family.binding_id), refresh_token: await issuer.issueRefreshToken(familyId, newGeneration), new_generation: newGeneration };
 }
 
 export type ApiErrorCode = "VALIDATION_ERROR" | "IDEMPOTENCY_CONFLICT" | "TOKEN_EXPIRED" | "TOKEN_INVALID" | "TOKEN_REUSE_DETECTED" | "BINDING_SUSPENDED" | "BINDING_REVOKED" | "CAPABILITY_NOT_GRANTED" | "CATEGORY_NOT_GRANTED" | "SENSITIVITY_EXCEEDS_CEILING" | "PURPOSE_NOT_AUTHORIZED" | "STALE_BINDING_REVISION" | "GRANT_EXPIRED" | "NOT_FOUND" | "DUPLICATE_OBSERVATION" | "PROTOCOL_NAMESPACE" | "QUARANTINED" | "SEMANTIC_LIMIT" | "RATE_LIMITED" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
@@ -216,5 +216,5 @@ export interface ApiGrantStore { getGrant(id: string): Promise<BindingGrant | nu
 export interface Stores { claims: ClaimStore; evidence: EvidenceStore; observations: ObservationStore; events: UserMemoryEventStore; bindings: ApiBindingStore; grants: ApiGrantStore; tokenFamilies: TokenFamilyStore; }
 export interface AppContext { stores: Stores; tokenIssuer: TokenIssuer; generateId: (prefix: string) => string; now: () => string; }
 export interface TokenClaims { binding_id: string; family_id: string; passport_id: string; generation: number; issued_at: string; expires_at: string; }
-export interface TokenValidator { validateAppToken(token: string): TokenClaims | null; validateUserToken(token: string): { passport_id: string; account_id: string } | null; }
-export interface RefreshTokenDecoder { decode(token: string): { family_id: string; generation: number } | null; }
+export interface TokenValidator { validateAppToken(token: string): TokenClaims | null | Promise<TokenClaims | null>; validateUserToken(token: string): { passport_id: string; account_id: string } | null; }
+export interface RefreshTokenDecoder { decode(token: string): { family_id: string; generation: number } | null | Promise<{ family_id: string; generation: number } | null>; }

@@ -152,8 +152,8 @@ function rowToObservation(row: Record<string, unknown>): Observation {
 export class SupabaseObservationStore implements ObservationStore {
   constructor(private client: PersistenceClient) {}
 
-  async getObservation(_passportId: string, observationId: string): Promise<Observation | null> {
-    const { data, error } = await this.client.from("observations").select("*").eq("id", observationId).maybeSingle();
+  async getObservation(passportId: string, observationId: string): Promise<Observation | null> {
+    const { data, error } = await this.client.from("observations").select("*, bindings!inner(passport_id)").eq("id", observationId).eq("bindings.passport_id", passportId).maybeSingle();
     if (error) throw error;
     return data ? rowToObservation(data) : null;
   }
@@ -199,14 +199,14 @@ function rowToEvidence(row: Record<string, unknown>): Evidence {
 export class SupabaseEvidenceStore implements EvidenceStore {
   constructor(private client: PersistenceClient) {}
 
-  async getEvidence(_passportId: string, evidenceId: string): Promise<Evidence | null> {
-    const { data, error } = await this.client.from("evidence").select("*").eq("id", evidenceId).maybeSingle();
+  async getEvidence(passportId: string, evidenceId: string): Promise<Evidence | null> {
+    const { data, error } = await this.client.from("evidence").select("*, claims!inner(passport_id)").eq("id", evidenceId).eq("claims.passport_id", passportId).maybeSingle();
     if (error) throw error;
     return data ? rowToEvidence(data) : null;
   }
 
-  async getEvidenceForClaim(_passportId: string, claimId: string, status?: EvidenceStatus): Promise<Evidence[]> {
-    let q = this.client.from("evidence").select("*").eq("claim_id", claimId);
+  async getEvidenceForClaim(passportId: string, claimId: string, status?: EvidenceStatus): Promise<Evidence[]> {
+    let q = this.client.from("evidence").select("*, claims!inner(passport_id)").eq("claim_id", claimId).eq("claims.passport_id", passportId);
     if (status) q = q.eq("status", status);
     const { data, error } = await q;
     if (error) throw error;
@@ -378,8 +378,8 @@ export class SupabaseUserMemoryEventStoreImpl implements UserMemoryEventStore {
     if (error) throw error;
   }
 
-  async getEventsForClaim(_passportId: string, claimId: string): Promise<UserMemoryEvent[]> {
-    const { data, error } = await this.client.from("user_memory_events").select("*").eq("claim_id", claimId).order("performed_at", { ascending: true });
+  async getEventsForClaim(passportId: string, claimId: string): Promise<UserMemoryEvent[]> {
+    const { data, error } = await this.client.from("user_memory_events").select("*").eq("claim_id", claimId).eq("passport_id", passportId).order("performed_at", { ascending: true });
     if (error) throw error;
     return (data ?? []).map(rowToEvent);
   }

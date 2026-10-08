@@ -28,9 +28,11 @@ export async function request<T>(
     }
   }
 
-  const headers: Record<string, string> = {
-    Authorization: config.getAuthHeader(),
-  };
+  const headers: Record<string, string> = {};
+  const auth = config.getAuthHeader();
+  if (auth) {
+    headers.Authorization = auth;
+  }
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }

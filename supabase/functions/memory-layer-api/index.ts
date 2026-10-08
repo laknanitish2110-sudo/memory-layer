@@ -1,9 +1,10 @@
 // Memory Layer API — Supabase Edge Function (entry point)
 import { Hono } from "https://esm.sh/hono@4.4.0";
+import { cors } from "https://esm.sh/hono@4.4.0/cors";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 import {
-  type ClaimCategory, type Sensitivity, type UserMemoryAction,
+  type ClaimCategory, type ClaimState, type Sensitivity, type UserMemoryAction,
   type AuthorizationRequest, type IdGenerator,
   type AppAuthContext, type UserAuthContext, type ApiBindingStore, type ApiGrantStore,
   type Stores, type AppContext, type TokenValidator, type RefreshTokenDecoder,
@@ -23,8 +24,44 @@ import {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const TOKEN_SECRET = Deno.env.get("TOKEN_SIGNING_SECRET") || SUPABASE_SERVICE_KEY.slice(0, 32);
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+// ── Token signing utilities (HMAC-SHA256) ──
+
+async function signToken(payload: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  const sigHex = Array.from(new Uint8Array(signature), b => b.toString(16).padStart(2, "0")).join("");
+  return `${payload}|${sigHex}`;
+}
+
+async function verifyToken(token: string, secret: string): Promise<string | null> {
+  const lastPipe = token.lastIndexOf("|");
+  if (lastPipe === -1) return null;
+  const payload = token.substring(0, lastPipe);
+  const sig = token.substring(lastPipe + 1);
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+  const sigBytes = new Uint8Array(sig.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+  const valid = await crypto.subtle.verify("HMAC", key, sigBytes, encoder.encode(payload));
+  return valid ? payload : null;
+}
 
 const sbBindingStore = new SupabaseBindingStoreImpl(supabase);
 const sbGrantStore = new SupabaseGrantStoreImpl(supabase);
@@ -57,14 +94,17 @@ const stores: Stores = {
 };
 
 const tokenValidator: TokenValidator = {
-  validateAppToken: (token) => {
-    if (!token.startsWith("app|")) return null;
-    const parts = token.split("|");
-    if (parts.length < 4) return null;
+  validateAppToken: async (token) => {
+    const verified = await verifyToken(token, TOKEN_SECRET);
+    if (!verified) return null;
+    const parts = verified.split("|");
+    if (parts.length !== 5 || parts[0] !== "app") return null;
+    const expiresAt = new Date(parts[4]);
+    if (isNaN(expiresAt.getTime()) || expiresAt <= new Date()) return null;
     return {
       binding_id: parts[1], family_id: parts[2], passport_id: "",
       generation: parseInt(parts[3], 10), issued_at: new Date().toISOString(),
-      expires_at: parts[4] ?? new Date(Date.now() + 3600000).toISOString(),
+      expires_at: parts[4],
     };
   },
   validateUserToken: (token) => {
@@ -76,10 +116,11 @@ const tokenValidator: TokenValidator = {
 };
 
 const refreshTokenDecoder: RefreshTokenDecoder = {
-  decode: (token) => {
-    if (!token.startsWith("refresh|")) return null;
-    const parts = token.split("|");
-    if (parts.length < 3) return null;
+  decode: async (token) => {
+    const verified = await verifyToken(token, TOKEN_SECRET);
+    if (!verified) return null;
+    const parts = verified.split("|");
+    if (parts.length !== 3 || parts[0] !== "refresh") return null;
     return { family_id: parts[1], generation: parseInt(parts[2], 10) };
   },
 };
@@ -87,19 +128,25 @@ const refreshTokenDecoder: RefreshTokenDecoder = {
 const appContext: AppContext = {
   stores,
   tokenIssuer: {
-    issueAccessToken: (familyId, bindingId) => {
+    issueAccessToken: async (familyId, bindingId) => {
       const expiresAt = new Date(Date.now() + 3600000).toISOString();
+      const payload = `app|${bindingId}|${familyId}|0|${expiresAt}`;
+      const token = await signToken(payload, TOKEN_SECRET);
       return {
-        token_hash: `app|${bindingId}|${familyId}|0|${expiresAt}`,
+        token_hash: token,
         family_id: familyId, binding_id: bindingId,
         issued_at: new Date().toISOString(), expires_at: expiresAt,
       };
     },
-    issueRefreshToken: (familyId, generation) => ({
-      token_hash: `refresh|${familyId}|${generation}`,
-      family_id: familyId, generation,
-      issued_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString(),
-    }),
+    issueRefreshToken: async (familyId, generation) => {
+      const payload = `refresh|${familyId}|${generation}`;
+      const token = await signToken(payload, TOKEN_SECRET);
+      return {
+        token_hash: token,
+        family_id: familyId, generation,
+        issued_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString(),
+      };
+    },
   },
   generateId: (_prefix) => crypto.randomUUID(),
   now: () => new Date().toISOString(),
@@ -112,6 +159,13 @@ const appContext: AppContext = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const app = new Hono().basePath("/memory-layer-api");
+
+app.use("*", cors({
+  origin: ["https://memorylayer.dev", "http://localhost:3000"],
+  allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization"],
+  maxAge: 86400,
+}));
 
 let reqCounter = 0;
 app.use("*", async (c, next) => {
@@ -131,7 +185,7 @@ app.onError((err, c) => {
 app.use("*", async (c, next) => {
   if (c.req.method === "POST") {
     const ct = c.req.header("Content-Type");
-    if (!ct || !ct.includes("application/json")) {
+    if (!ct || !ct.startsWith("application/json")) {
       throw new ApiError(400, "VALIDATION_ERROR", "Content-Type must be application/json", c.get("requestId"));
     }
   }
@@ -153,7 +207,7 @@ function appAuthMiddleware(validator: TokenValidator, ctx: AppContext) {
     if (!authHeader) throw new ApiError(401, "TOKEN_INVALID", "Missing Authorization header", requestId);
     const parts = authHeader.split(" ");
     if (parts.length !== 2 || parts[0] !== "Bearer") throw new ApiError(401, "TOKEN_INVALID", "Malformed Authorization header", requestId);
-    const claims = validator.validateAppToken(parts[1]);
+    const claims = await validator.validateAppToken(parts[1]);
     if (!claims) throw new ApiError(401, "TOKEN_INVALID", "Invalid access token", requestId);
     const now = new Date().toISOString();
     if (claims.expires_at && new Date(claims.expires_at) < new Date(now)) throw new ApiError(401, "TOKEN_EXPIRED", "Access token expired", requestId);
@@ -209,6 +263,12 @@ app.post("/v1/bindings", uAuth, async (c) => {
   const body = await c.req.json().catch(() => { throw new ApiError(400, "VALIDATION_ERROR", "Invalid JSON body", rid); });
   if (!body.passport_id || !body.app_principal_id) throw new ApiError(400, "VALIDATION_ERROR", "passport_id and app_principal_id are required", rid);
 
+  // Ownership check: verify the user owns this passport
+  const passport = await supabase.from("passports").select("account_id").eq("id", body.passport_id).single();
+  if (!passport.data || passport.data.account_id !== auth.accountId) {
+    return c.json({ error: { code: "FORBIDDEN", message: "You do not own this passport" } }, 403);
+  }
+
   const bindingId = ctx.generateId("bnd");
   const grantId = ctx.generateId("grt");
   const now = ctx.now();
@@ -251,12 +311,19 @@ app.post("/v1/bindings/:id/revoke", uAuth, async (c) => {
 
 // --- Grants ---
 app.post("/v1/bindings/:id/grants", uAuth, async (c) => {
+  const auth = c.get("auth") as UserAuthContext;
   const rid = c.get("requestId");
   const bindingId = c.req.param("id");
   if (!UUID_RE.test(bindingId)) throw new ApiError(404, "NOT_FOUND", "Binding not found", rid);
   const body = await c.req.json().catch(() => { throw new ApiError(400, "VALIDATION_ERROR", "Invalid JSON body", rid); });
   const binding = await ctx.stores.bindings.getBinding(bindingId);
   if (!binding) throw new ApiError(404, "NOT_FOUND", "Binding not found", rid);
+
+  // Ownership check: binding -> passport -> account
+  const passport = await supabase.from("passports").select("account_id").eq("id", binding.passport_id).single();
+  if (!passport.data || passport.data.account_id !== auth.accountId) {
+    return c.json({ error: { code: "FORBIDDEN", message: "You do not own this binding" } }, 403);
+  }
   const grantId = ctx.generateId("grt");
   const now = ctx.now();
   const grant = {
@@ -274,11 +341,21 @@ app.post("/v1/bindings/:id/grants", uAuth, async (c) => {
 });
 
 app.post("/v1/grants/:id/consent", uAuth, async (c) => {
+  const auth = c.get("auth") as UserAuthContext;
   const rid = c.get("requestId");
   const grantParamId = c.req.param("id");
   if (!UUID_RE.test(grantParamId)) throw new ApiError(404, "NOT_FOUND", "Grant not found", rid);
   const grant = await ctx.stores.grants.getGrant(grantParamId);
   if (!grant) throw new ApiError(404, "NOT_FOUND", "Grant not found", rid);
+
+  // Ownership check: grant -> binding -> passport -> account
+  const binding = await ctx.stores.bindings.getBinding(grant.binding_id);
+  if (!binding) return c.json({ error: { code: "NOT_FOUND", message: "Binding not found" } }, 404);
+  const passport = await supabase.from("passports").select("account_id").eq("id", binding.passport_id).single();
+  if (!passport.data || passport.data.account_id !== auth.accountId) {
+    return c.json({ error: { code: "FORBIDDEN", message: "You do not own this grant" } }, 403);
+  }
+
   return c.json({ data: { grant: { id: grant.id, version: grant.version, active: grant.active }, consent_record: { id: ctx.generateId("cns"), consent_type: "expansion" } }, meta: { request_id: rid, policy_version: "v0.1.0" } });
 });
 
@@ -364,7 +441,18 @@ app.post("/v1/observations/:id/retract", aAuth, async (c) => {
   if (decision.decision === "DENY") throw mapKernelDenyToApiError(decision.reason, requestId);
   const observation = await ctx.stores.observations.getObservation(auth.passportId, obsId);
   if (!observation || observation.binding_id !== auth.bindingId) throw new ApiError(404, "NOT_FOUND", "Observation not found", requestId);
-  return c.json({ data: { observation_id: observation.id, evidence_id: observation.outcome && "evidence_id" in observation.outcome ? observation.outcome.evidence_id : null, evidence_status: "retracted" }, meta: { request_id: requestId, policy_version: "v0.1.0" } });
+
+  // Actually retract the evidence associated with this observation
+  let evidenceId: string | null = null;
+  if (observation.outcome && "evidence_id" in observation.outcome) {
+    evidenceId = observation.outcome.evidence_id;
+    const evidence = await ctx.stores.evidence.getEvidence(auth.passportId, evidenceId);
+    if (evidence) {
+      await ctx.stores.evidence.updateEvidence(auth.passportId, { ...evidence, status: "retracted", retracted_at: ctx.now(), retraction_reason: "observation retracted" });
+    }
+  }
+
+  return c.json({ data: { observation_id: observation.id, evidence_id: evidenceId, evidence_status: "retracted" }, meta: { request_id: requestId, policy_version: "v0.1.0" } });
 });
 
 // --- Context (read pipeline) ---
@@ -374,6 +462,15 @@ app.get("/v1/context", aAuth, async (c) => {
   const categoriesParam = c.req.query("categories");
   const purposeParam = c.req.query("purpose");
   const requestedCategories: ClaimCategory[] = categoriesParam ? (categoriesParam.split(",") as ClaimCategory[]) : (auth.grant.data_policy.read.categories as ClaimCategory[]);
+
+  // Validate categories against known values
+  const CONTEXT_VALID_CATEGORIES: ClaimCategory[] = ["skills", "preferences", "goals", "projects", "behavioral_patterns", "emotional_patterns", "personal_context"];
+  if (categoriesParam) {
+    const invalid = requestedCategories.filter((cat: string) => !CONTEXT_VALID_CATEGORIES.includes(cat as ClaimCategory));
+    if (invalid.length > 0) {
+      return c.json({ error: { code: "VALIDATION_ERROR", message: `Invalid categories: ${invalid.join(", ")}` } }, 400);
+    }
+  }
 
   const authRequest: AuthorizationRequest = {
     credential_id: `cred_${auth.bindingId}`, binding_id: auth.bindingId, binding_revision: auth.bindingRevision,
@@ -430,6 +527,30 @@ function userClaimHandler(action: UserMemoryAction) {
     let newValue = claim.value;
     let newSensitivity = claim.sensitivity;
 
+    // Input validation for OVERRIDE action (M10)
+    if (action === "OVERRIDE" && body.declared_state !== undefined) {
+      const VALID_CLAIM_STATES: ClaimState[] = ["DECLARED", "SUPPORTED", "OBSERVED", "CONTESTED", "UNKNOWN", "UNSUPPORTED", "STALE", "EXPIRED"];
+      if (!VALID_CLAIM_STATES.includes(body.declared_state)) {
+        throw new ApiError(400, "VALIDATION_ERROR", `Invalid declared_state '${body.declared_state}'. Must be one of: ${VALID_CLAIM_STATES.join(", ")}`, requestId);
+      }
+    }
+
+    // Input validation for RECLASSIFY action (M11-M12)
+    if (action === "RECLASSIFY") {
+      if (body.new_sensitivity !== undefined) {
+        const VALID_SENSITIVITIES: Sensitivity[] = ["public", "personal", "sensitive", "restricted"];
+        if (!VALID_SENSITIVITIES.includes(body.new_sensitivity)) {
+          throw new ApiError(400, "VALIDATION_ERROR", `Invalid new_sensitivity '${body.new_sensitivity}'. Must be one of: ${VALID_SENSITIVITIES.join(", ")}`, requestId);
+        }
+      }
+      if (body.new_sharing_policy !== undefined) {
+        const VALID_SHARING_POLICY_TYPES = ["grant_controlled", "explicit_only", "user_only"];
+        if (!body.new_sharing_policy.type || !VALID_SHARING_POLICY_TYPES.includes(body.new_sharing_policy.type)) {
+          throw new ApiError(400, "VALIDATION_ERROR", `Invalid new_sharing_policy type. Must be one of: ${VALID_SHARING_POLICY_TYPES.join(", ")}`, requestId);
+        }
+      }
+    }
+
     switch (action) {
       case "CONFIRM": newState = "DECLARED"; break;
       case "CORRECT": newState = "DECLARED"; newValue = body.new_value ?? claim.value; break;
@@ -473,7 +594,7 @@ app.post("/v1/tokens/refresh", async (c) => {
   const requestId = c.get("requestId");
   const body = await c.req.json().catch(() => { throw new ApiError(400, "VALIDATION_ERROR", "Invalid JSON body", requestId); });
   if (!body.refresh_token || typeof body.refresh_token !== "string") throw new ApiError(400, "VALIDATION_ERROR", "refresh_token is required and must be a string", requestId);
-  const decoded = refreshTokenDecoder.decode(body.refresh_token);
+  const decoded = await refreshTokenDecoder.decode(body.refresh_token);
   if (!decoded) throw new ApiError(401, "TOKEN_INVALID", "Invalid refresh token", requestId);
   if (!UUID_RE.test(decoded.family_id)) throw new ApiError(401, "TOKEN_INVALID", "Invalid refresh token", requestId);
   const now = new Date().toISOString();
