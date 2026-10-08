@@ -5,6 +5,7 @@ import { authorize } from "@memory-layer/protocol/src/authorization/engine.js";
 import { ingest, type IdGenerator } from "@memory-layer/protocol/src/reconciliation/write-pipeline.js";
 import type { AuthorizationRequest } from "@memory-layer/protocol/src/authorization/types.js";
 import type { ClaimCategory, Sensitivity } from "@memory-layer/protocol/src/memory/types.js";
+import { checkRateLimit } from "../middleware/rate-limit.js";
 
 const SERVER_DETERMINED_FIELDS = ["id", "binding_id", "outcome", "submitted_at"] as const;
 
@@ -13,6 +14,17 @@ export function makeObservationHandlers(ctx: AppContext) {
     create: async (c: Context) => {
       const auth = c.get("auth") as AppAuthContext;
       const requestId = c.get("requestId");
+
+      // Stricter write rate limit: 60 req/min per binding
+      const writeLimit = checkRateLimit(`write:${auth.bindingId}`, { windowMs: 60_000, maxRequests: 60 });
+      if (!writeLimit.allowed) {
+        c.header("Retry-After", String(Math.ceil((writeLimit.resetAt - Date.now()) / 1000)));
+        c.header("X-RateLimit-Remaining", "0");
+        c.header("X-RateLimit-Reset", String(Math.ceil(writeLimit.resetAt / 1000)));
+        return c.json({ error: { code: "RATE_LIMITED", message: "Too many write requests. Try again later.", request_id: requestId } }, 429);
+      }
+      c.header("X-RateLimit-Remaining", String(writeLimit.remaining));
+      c.header("X-RateLimit-Reset", String(Math.ceil(writeLimit.resetAt / 1000)));
 
       const body = await c.req.json().catch(() => {
         throw new ApiError(400, "VALIDATION_ERROR", "Invalid JSON body", requestId);

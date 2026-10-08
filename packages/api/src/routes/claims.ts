@@ -4,6 +4,7 @@ import { ApiError, mapKernelDenyToApiError } from "../errors/api-error.js";
 import { authorize, filterClaimsBySensitivity, filterClaimsBySharingPolicy } from "@memory-layer/protocol/src/authorization/engine.js";
 import type { AuthorizationRequest } from "@memory-layer/protocol/src/authorization/types.js";
 import type { ClaimCategory, Sensitivity, UserMemoryAction } from "@memory-layer/protocol/src/memory/types.js";
+import { checkRateLimit } from "../middleware/rate-limit.js";
 
 export function makeClaimHandlers(ctx: AppContext) {
   return {
@@ -72,6 +73,18 @@ export function makeUserClaimHandlers(ctx: AppContext) {
     return async (c: Context) => {
       const auth = c.get("auth") as UserAuthContext;
       const requestId = c.get("requestId");
+
+      // Write rate limit for user claim actions: 60 req/min per passport
+      const writeLimit = checkRateLimit(`write:${auth.passportId}`, { windowMs: 60_000, maxRequests: 60 });
+      if (!writeLimit.allowed) {
+        c.header("Retry-After", String(Math.ceil((writeLimit.resetAt - Date.now()) / 1000)));
+        c.header("X-RateLimit-Remaining", "0");
+        c.header("X-RateLimit-Reset", String(Math.ceil(writeLimit.resetAt / 1000)));
+        return c.json({ error: { code: "RATE_LIMITED", message: "Too many write requests. Try again later.", request_id: requestId } }, 429);
+      }
+      c.header("X-RateLimit-Remaining", String(writeLimit.remaining));
+      c.header("X-RateLimit-Reset", String(Math.ceil(writeLimit.resetAt / 1000)));
+
       const claimId = c.req.param("id");
 
       const claim = await ctx.stores.claims.getClaim(auth.passportId, claimId);

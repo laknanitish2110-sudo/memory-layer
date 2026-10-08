@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { ApiError } from "../errors/api-error.js";
 import type { AppAuthContext, UserAuthContext, AppContext } from "../context.js";
+import { checkRateLimit } from "./rate-limit.js";
 
 export interface TokenClaims {
   binding_id: string;
@@ -62,11 +63,28 @@ export function appAuth(validator: TokenValidator, appCtx: AppContext): Middlewa
     };
 
     c.set("auth", authContext);
+
+    // Set passport scope for RLS enforcement (defense-in-depth)
+    if (appCtx.setPassportScope) {
+      await appCtx.setPassportScope(binding.passport_id);
+    }
+
+    // Per-binding rate limiting for authenticated endpoints (M14)
+    const apiLimit = checkRateLimit(`api:${binding.id}`, { windowMs: 60_000, maxRequests: 120 });
+    if (!apiLimit.allowed) {
+      c.header("Retry-After", String(Math.ceil((apiLimit.resetAt - Date.now()) / 1000)));
+      c.header("X-RateLimit-Remaining", "0");
+      c.header("X-RateLimit-Reset", String(Math.ceil(apiLimit.resetAt / 1000)));
+      return c.json({ error: { code: "RATE_LIMITED", message: "Too many requests. Try again later.", request_id: requestId } }, 429);
+    }
+    c.header("X-RateLimit-Remaining", String(apiLimit.remaining));
+    c.header("X-RateLimit-Reset", String(Math.ceil(apiLimit.resetAt / 1000)));
+
     await next();
   };
 }
 
-export function userAuth(validator: TokenValidator): MiddlewareHandler {
+export function userAuth(validator: TokenValidator, appCtx?: AppContext): MiddlewareHandler {
   return async (c, next) => {
     const requestId = c.get("requestId") ?? "req_unknown";
     const authHeader = c.req.header("Authorization");
@@ -93,6 +111,12 @@ export function userAuth(validator: TokenValidator): MiddlewareHandler {
     };
 
     c.set("auth", authContext);
+
+    // Set passport scope for RLS enforcement (defense-in-depth)
+    if (appCtx?.setPassportScope) {
+      await appCtx.setPassportScope(userClaims.passport_id);
+    }
+
     await next();
   };
 }

@@ -136,6 +136,9 @@ const refreshTokenDecoder: RefreshTokenDecoder = {
 
 const appContext: AppContext = {
   stores,
+  setPassportScope: async (passportId: string) => {
+    await supabase.rpc("set_passport_scope", { p_passport_id: passportId });
+  },
   tokenIssuer: {
     issueAccessToken: async (familyId, bindingId) => {
       const expiresAt = new Date(Date.now() + 3600000).toISOString();

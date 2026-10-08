@@ -39,7 +39,7 @@ export function createApp(options: CreateAppOptions): Hono {
     c.header("Pragma", "no-cache");
   });
 
-  const uAuth = userAuth(tokenValidator);
+  const uAuth = userAuth(tokenValidator, ctx);
   const aAuth = appAuth(tokenValidator, ctx);
 
   // Build handlers

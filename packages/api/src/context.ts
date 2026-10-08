@@ -49,4 +49,6 @@ export interface AppContext {
   tokenIssuer: TokenIssuer;
   generateId: (prefix: string) => string;
   now: () => string;
+  /** Set the passport scope for RLS enforcement (defense-in-depth). */
+  setPassportScope?: (passportId: string) => Promise<void>;
 }

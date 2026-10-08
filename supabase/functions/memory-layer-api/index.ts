@@ -12,6 +12,8 @@ import {
   ingest, executeReadPipeline, refreshTokenFamily, mapKernelDenyToApiError, mapIngestionReasonToApiError,
 } from "./kernel.ts";
 
+import { checkRateLimit } from "./rate-limit.ts";
+
 import {
   SupabaseClaimStore, SupabaseObservationStore, SupabaseEvidenceStore,
   SupabaseBindingStoreImpl, SupabaseGrantStoreImpl,
@@ -217,6 +219,21 @@ function appAuthMiddleware(validator: TokenValidator, ctx: AppContext) {
     if (!grant) throw new ApiError(401, "TOKEN_INVALID", "No active grant", requestId);
     const authContext: AppAuthContext = { type: "app", passportId: binding.passport_id, bindingId: binding.id, grantId: grant.id, bindingRevision: binding.revision, binding, grant };
     c.set("auth", authContext);
+
+    // Set passport scope for RLS enforcement (defense-in-depth)
+    await supabase.rpc("set_passport_scope", { p_passport_id: binding.passport_id });
+
+    // Per-binding rate limiting for authenticated endpoints (M14)
+    const apiLimit = checkRateLimit(`api:${binding.id}`, { windowMs: 60_000, maxRequests: 120 });
+    if (!apiLimit.allowed) {
+      c.header("Retry-After", String(Math.ceil((apiLimit.resetAt - Date.now()) / 1000)));
+      c.header("X-RateLimit-Remaining", "0");
+      c.header("X-RateLimit-Reset", String(Math.ceil(apiLimit.resetAt / 1000)));
+      return c.json({ error: { code: "RATE_LIMITED", message: "Too many requests. Try again later.", request_id: requestId } }, 429);
+    }
+    c.header("X-RateLimit-Remaining", String(apiLimit.remaining));
+    c.header("X-RateLimit-Reset", String(Math.ceil(apiLimit.resetAt / 1000)));
+
     await next();
   };
 }
@@ -232,6 +249,10 @@ function userAuthMiddleware(validator: TokenValidator) {
     if (!userClaims) throw new ApiError(401, "TOKEN_INVALID", "Invalid user session token", requestId);
     const authContext: UserAuthContext = { type: "user", passportId: userClaims.passport_id, accountId: userClaims.account_id };
     c.set("auth", authContext);
+
+    // Set passport scope for RLS enforcement (defense-in-depth)
+    await supabase.rpc("set_passport_scope", { p_passport_id: userClaims.passport_id });
+
     await next();
   };
 }
@@ -378,6 +399,18 @@ const SERVER_DETERMINED_FIELDS = ["id", "binding_id", "outcome", "submitted_at"]
 app.post("/v1/observations", aAuth, async (c) => {
   const auth = c.get("auth") as AppAuthContext;
   const requestId = c.get("requestId");
+
+  // Stricter write rate limit: 60 req/min per binding
+  const writeLimit = checkRateLimit(`write:${auth.bindingId}`, { windowMs: 60_000, maxRequests: 60 });
+  if (!writeLimit.allowed) {
+    c.header("Retry-After", String(Math.ceil((writeLimit.resetAt - Date.now()) / 1000)));
+    c.header("X-RateLimit-Remaining", "0");
+    c.header("X-RateLimit-Reset", String(Math.ceil(writeLimit.resetAt / 1000)));
+    return c.json({ error: { code: "RATE_LIMITED", message: "Too many write requests. Try again later.", request_id: requestId } }, 429);
+  }
+  c.header("X-RateLimit-Remaining", String(writeLimit.remaining));
+  c.header("X-RateLimit-Reset", String(Math.ceil(writeLimit.resetAt / 1000)));
+
   const body = await c.req.json().catch(() => { throw new ApiError(400, "VALIDATION_ERROR", "Invalid JSON body", requestId); });
 
   for (const field of SERVER_DETERMINED_FIELDS) {
@@ -514,6 +547,18 @@ function userClaimHandler(action: UserMemoryAction) {
   return async (c: any) => {
     const auth = c.get("auth") as UserAuthContext;
     const requestId = c.get("requestId");
+
+    // Write rate limit for user claim actions: 60 req/min per passport
+    const writeLimit = checkRateLimit(`write:${auth.passportId}`, { windowMs: 60_000, maxRequests: 60 });
+    if (!writeLimit.allowed) {
+      c.header("Retry-After", String(Math.ceil((writeLimit.resetAt - Date.now()) / 1000)));
+      c.header("X-RateLimit-Remaining", "0");
+      c.header("X-RateLimit-Reset", String(Math.ceil(writeLimit.resetAt / 1000)));
+      return c.json({ error: { code: "RATE_LIMITED", message: "Too many write requests. Try again later.", request_id: requestId } }, 429);
+    }
+    c.header("X-RateLimit-Remaining", String(writeLimit.remaining));
+    c.header("X-RateLimit-Reset", String(Math.ceil(writeLimit.resetAt / 1000)));
+
     const claimId = c.req.param("id");
     if (!UUID_RE.test(claimId)) throw new ApiError(404, "NOT_FOUND", "Claim not found", requestId);
     const claim = await ctx.stores.claims.getClaim(auth.passportId, claimId);
@@ -592,6 +637,19 @@ app.post("/v1/claims/:id/delete", uAuth, userClaimHandler("DELETE"));
 // --- Token refresh ---
 app.post("/v1/tokens/refresh", async (c) => {
   const requestId = c.get("requestId");
+
+  // IP-based rate limiting for unauthenticated token refresh (M13)
+  const clientIp = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const refreshLimit = checkRateLimit(`refresh:${clientIp}`, { windowMs: 60_000, maxRequests: 10 });
+  if (!refreshLimit.allowed) {
+    c.header("Retry-After", String(Math.ceil((refreshLimit.resetAt - Date.now()) / 1000)));
+    c.header("X-RateLimit-Remaining", "0");
+    c.header("X-RateLimit-Reset", String(Math.ceil(refreshLimit.resetAt / 1000)));
+    return c.json({ error: { code: "RATE_LIMITED", message: "Too many requests. Try again later.", request_id: requestId } }, 429);
+  }
+  c.header("X-RateLimit-Remaining", String(refreshLimit.remaining));
+  c.header("X-RateLimit-Reset", String(Math.ceil(refreshLimit.resetAt / 1000)));
+
   const body = await c.req.json().catch(() => { throw new ApiError(400, "VALIDATION_ERROR", "Invalid JSON body", requestId); });
   if (!body.refresh_token || typeof body.refresh_token !== "string") throw new ApiError(400, "VALIDATION_ERROR", "refresh_token is required and must be a string", requestId);
   const decoded = await refreshTokenDecoder.decode(body.refresh_token);
